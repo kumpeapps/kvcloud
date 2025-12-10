@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: kvcloud-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://kvcloud:kvcloud@db:5432/kvcloud
+      - SECRET_KEY=change-this-in-production
+      - JWT_SECRET_KEY=change-this-jwt-secret-in-production
+      - CORS_ORIGINS=http://localhost:4200,http://localhost
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - db
+    networks:
+      - kvcloud-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: kvcloud-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - kvcloud-network
+    restart: unless-stopped
+
+  db:
+    image: postgres:15-alpine
+    container_name: kvcloud-db
+    environment:
+      - POSTGRES_USER=kvcloud
+      - POSTGRES_PASSWORD=kvcloud
+      - POSTGRES_DB=kvcloud
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - kvcloud-network
+    restart: unless-stopped
+
+networks:
+  kvcloud-network:
+    driver: bridge
+
+volumes:
+  postgres-data:

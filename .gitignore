@@ -205,3 +205,13 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# KVCloud specific
+backend/kvcloud.db
+backend/kvcloud.db-*
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+
+# Docker
+docker-compose.override.yml
