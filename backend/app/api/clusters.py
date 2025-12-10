@@ -156,10 +156,10 @@ async def get_node_status(
 ):
     """Get node status from Proxmox."""
     service = ProxmoxService(db)
-    status = await service.get_node_status(node_id)
-    if not status:
+    node_status = await service.get_node_status(node_id)
+    if not node_status:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Node not found or unreachable"
         )
-    return status
+    return node_status

@@ -32,13 +32,13 @@ async def get_vm_status(
 ):
     """Get VM status."""
     service = ProxmoxService(db)
-    status = await service.get_vm_status(node_id, vmid)
-    if not status:
+    vm_status = await service.get_vm_status(node_id, vmid)
+    if not vm_status:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="VM not found"
         )
-    return status
+    return vm_status
 
 
 @router.post("/node/{node_id}/vm/{vmid}/start")

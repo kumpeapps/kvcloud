@@ -64,9 +64,9 @@ app.include_router(vms.router)
 for router in module_manager.get_all_routers():
     app.include_router(router)
 
-# Register plugin routes
-for route in plugin_manager.get_all_routes():
-    app.add_route(route.path, route.endpoint, methods=route.methods)
+# Register plugin routers
+for router in plugin_manager.get_all_routes():
+    app.include_router(router)
 
 
 @app.get("/")
