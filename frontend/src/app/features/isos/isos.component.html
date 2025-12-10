@@ -1,0 +1,168 @@
+<div class="isos-container">
+  <div class="header">
+    <h1>ISO Image Management</h1>
+    <button
+      mat-raised-button
+      color="primary"
+      *hasPermission="{ resource: 'iso', action: 'upload' }"
+      (click)="openUploadDialog()">
+      <mat-icon>cloud_upload</mat-icon>
+      Upload ISO
+    </button>
+  </div>
+
+  <app-loading-spinner *ngIf="loading()" />
+
+  <div class="content" *ngIf="!loading()">
+    <!-- Node Selector -->
+    <mat-card class="node-selector-card">
+      <mat-card-content>
+        <mat-form-field appearance="outline" class="node-select">
+          <mat-label>Select Node</mat-label>
+          <mat-select [(value)]="selectedNode" (selectionChange)="selectNode($event.value)">
+            <mat-option *ngFor="let node of nodes()" [value]="node">
+              {{ node.name }} ({{ node.host }})
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- ISO List -->
+    <mat-card class="isos-card" *ngIf="selectedNode()">
+      <mat-card-header>
+        <mat-card-title>ISO Images on {{ selectedNode()?.name }}</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <app-loading-spinner *ngIf="isosLoading()" />
+
+        <app-empty-state
+          *ngIf="!isosLoading() && isos().length === 0"
+          icon="album"
+          title="No ISO Images"
+          message="No ISO images found on this node. Upload an ISO to get started."
+          [actionButton]="canUploadISO() ? 'Upload ISO' : undefined"
+          (action)="openUploadDialog()"
+        />
+
+        <table mat-table [dataSource]="isos()" *ngIf="!isosLoading() && isos().length > 0">
+          <!-- Name Column -->
+          <ng-container matColumnDef="name">
+            <th mat-header-cell *matHeaderCellDef>Name</th>
+            <td mat-cell *matCellDef="let iso">
+              <div class="iso-name">
+                <mat-icon>album</mat-icon>
+                <span>{{ iso.name }}</span>
+              </div>
+            </td>
+          </ng-container>
+
+          <!-- Storage Column -->
+          <ng-container matColumnDef="storage">
+            <th mat-header-cell *matHeaderCellDef>Storage</th>
+            <td mat-cell *matCellDef="let iso">{{ iso.storage }}</td>
+          </ng-container>
+
+          <!-- Size Column -->
+          <ng-container matColumnDef="size">
+            <th mat-header-cell *matHeaderCellDef>Size</th>
+            <td mat-cell *matCellDef="let iso">{{ formatBytes(iso.size) }}</td>
+          </ng-container>
+
+          <!-- Format Column -->
+          <ng-container matColumnDef="format">
+            <th mat-header-cell *matHeaderCellDef>Format</th>
+            <td mat-cell *matCellDef="let iso">{{ iso.format }}</td>
+          </ng-container>
+
+          <!-- Actions Column -->
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef>Actions</th>
+            <td mat-cell *matCellDef="let iso">
+              <button
+                mat-icon-button
+                color="warn"
+                *hasPermission="{ resource: 'iso', action: 'delete' }"
+                [matTooltip]="'Delete ISO'"
+                (click)="deleteISO(iso)">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+        </table>
+      </mat-card-content>
+    </mat-card>
+  </div>
+</div>
+
+<!-- Upload ISO Dialog -->
+<div class="dialog-overlay" *ngIf="showUploadDialog()" (click)="closeUploadDialog()">
+  <div class="dialog-container" (click)="$event.stopPropagation()">
+    <h2 mat-dialog-title>Upload ISO from URL</h2>
+    <form [formGroup]="uploadForm" (ngSubmit)="uploadISO()">
+      <mat-dialog-content>
+        <mat-form-field appearance="outline">
+          <mat-label>Storage</mat-label>
+          <mat-select formControlName="storage">
+            <mat-option *ngFor="let storage of storages()" [value]="storage.storage">
+              {{ storage.storage }} ({{ formatBytes(storage.avail) }} available)
+            </mat-option>
+          </mat-select>
+          <mat-error *ngIf="uploadForm.get('storage')?.hasError('required')">
+            Storage is required
+          </mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Filename</mat-label>
+          <input matInput formControlName="filename" placeholder="ubuntu-22.04.iso" />
+          <mat-hint>Must end with .iso</mat-hint>
+          <mat-error *ngIf="uploadForm.get('filename')?.hasError('required')">
+            Filename is required
+          </mat-error>
+          <mat-error *ngIf="uploadForm.get('filename')?.hasError('pattern')">
+            Filename must end with .iso
+          </mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Download URL</mat-label>
+          <input matInput formControlName="url" placeholder="https://example.com/ubuntu.iso" />
+          <mat-hint>HTTP or HTTPS URL to download the ISO from</mat-hint>
+          <mat-error *ngIf="uploadForm.get('url')?.hasError('required')">
+            URL is required
+          </mat-error>
+          <mat-error *ngIf="uploadForm.get('url')?.hasError('pattern')">
+            Must be a valid HTTP/HTTPS URL
+          </mat-error>
+        </mat-form-field>
+
+        <!-- Upload Progress -->
+        <div class="upload-progress" *ngIf="uploading() || uploadProgress()">
+          <mat-progress-bar mode="indeterminate" *ngIf="uploading()"></mat-progress-bar>
+          <p class="progress-text">{{ uploadProgress() }}</p>
+        </div>
+
+        <mat-card class="info-card">
+          <mat-card-content>
+            <mat-icon>info</mat-icon>
+            <p>The ISO will be downloaded directly to the Proxmox node storage. Large files may take several minutes.</p>
+          </mat-card-content>
+        </mat-card>
+      </mat-dialog-content>
+
+      <mat-dialog-actions align="end">
+        <button mat-button type="button" (click)="closeUploadDialog()" [disabled]="uploading()">
+          Cancel
+        </button>
+        <button mat-raised-button color="primary" type="submit" [disabled]="uploadForm.invalid || uploading()">
+          <mat-icon>cloud_upload</mat-icon>
+          {{ uploading() ? 'Uploading...' : 'Upload' }}
+        </button>
+      </mat-dialog-actions>
+    </form>
+  </div>
+</div>

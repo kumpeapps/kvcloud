@@ -1,0 +1,331 @@
+<div class="vm-detail-container">
+  <app-loading-spinner *ngIf="loading()" message="Loading VM details..."></app-loading-spinner>
+
+  <div *ngIf="!loading()" class="vm-detail-content">
+    <!-- Header -->
+    <div class="page-header">
+      <button mat-icon-button (click)="goBack()" class="back-button">
+        <mat-icon>arrow_back</mat-icon>
+      </button>
+      <div class="header-info">
+        <h1>{{ vm()?.name || 'VM-' + vmid() }}</h1>
+        <p class="subtitle">ID: {{ vmid() }} | Node: {{ vm()?.node || 'Unknown' }}</p>
+      </div>
+      <div class="header-actions">
+        <app-status-badge 
+          [status]="getStatusType(vm()?.status || '')"
+          [label]="(vm()?.status || 'Unknown') | titlecase">
+        </app-status-badge>
+        <mat-chip *ngIf="isLockedVM()" class="locked-badge">
+          <mat-icon>lock</mat-icon> Locked (Cloned)
+        </mat-chip>
+      </div>
+    </div>
+
+    <!-- Error Message -->
+    <mat-card *ngIf="error()" class="error-card">
+      <mat-card-content>
+        <mat-icon color="warn">error</mat-icon>
+        {{ error() }}
+      </mat-card-content>
+    </mat-card>
+
+    <!-- VM Details -->
+    <div *ngIf="!error() && vm()" class="vm-details">
+      <!-- Operations Panel -->
+      <mat-card class="operations-card">
+        <mat-card-header>
+          <mat-card-title>Operations</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="operation-buttons">
+            <button mat-raised-button 
+                    color="primary"
+                    [disabled]="vm()?.status === 'running'"
+                    (click)="startVM()">
+              <mat-icon>play_arrow</mat-icon>
+              Start
+            </button>
+            <button mat-raised-button 
+                    color="warn"
+                    [disabled]="vm()?.status === 'stopped'"
+                    (click)="stopVM()">
+              <mat-icon>stop</mat-icon>
+              Power Off (Hard)
+            </button>
+            <button mat-raised-button 
+                    [disabled]="vm()?.status === 'stopped'"
+                    (click)="shutdownVM()">
+              <mat-icon>power_settings_new</mat-icon>
+              Shutdown
+            </button>
+            <button mat-raised-button 
+                    [disabled]="vm()?.status === 'stopped'"
+                    (click)="restartVM()">
+              <mat-icon>restart_alt</mat-icon>
+              Restart
+            </button>
+            <button mat-raised-button 
+                    [disabled]="vm()?.status !== 'running'"
+                    (click)="pauseVM()">
+              <mat-icon>pause</mat-icon>
+              Pause
+            </button>
+            <button mat-raised-button 
+                    color="primary"
+                    [disabled]="vm()?.status !== 'paused'"
+                    (click)="resumeVM()">
+              <mat-icon>play_arrow</mat-icon>
+              Resume
+            </button>
+            <button mat-raised-button 
+                    color="warn"
+                    [disabled]="vm()?.status === 'stopped'"
+                    (click)="resetVM()">
+              <mat-icon>refresh</mat-icon>
+              Reset
+            </button>
+            <button mat-raised-button color="primary" (click)="cloneVM()" [disabled]="loading()">
+              <mat-icon>content_copy</mat-icon>
+              Clone
+            </button>
+            <button mat-raised-button color="accent" (click)="reinstallOS()" [disabled]="loading() || !isLockedVM()" *ngIf="isLockedVM()">
+              <mat-icon>restore</mat-icon>
+              Reinstall OS
+            </button>
+            <button mat-raised-button color="accent" (click)="editConfig()" [disabled]="loading()">
+              <mat-icon>settings</mat-icon>
+              Configure
+            </button>
+            <button mat-raised-button (click)="configureBootOrder()" [disabled]="loading()">
+              <mat-icon>tune</mat-icon>
+              Boot Order
+            </button>
+            <button mat-raised-button (click)="convertToTemplate()" [disabled]="loading() || isTemplate()" *ngIf="!isTemplate()">
+              <mat-icon>layers</mat-icon>
+              To Template
+            </button>
+            <button mat-raised-button color="primary" (click)="mountISO()" [disabled]="loading()">
+              <mat-icon>disc_full</mat-icon>
+              Mount ISO
+            </button>
+
+            <button mat-raised-button (click)="unmountISO()" [disabled]="loading()">
+              <mat-icon>eject</mat-icon>
+              Unmount ISO
+            </button>
+            <button mat-raised-button color="warn" (click)="deleteVM()" [disabled]="loading()">
+              <mat-icon>delete</mat-icon>
+              Delete
+            </button>
+            <button mat-raised-button [disabled]="true">
+              <mat-icon>terminal</mat-icon>
+              Console
+            </button>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Resource Usage -->
+      <div class="resources-grid">
+        <!-- CPU Card -->
+        <mat-card>
+          <mat-card-header>
+            <mat-icon mat-card-avatar color="primary">memory</mat-icon>
+            <mat-card-title>CPU Usage</mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="resource-display">
+              <div class="resource-value">{{ cpuPercentage() }}%</div>
+              <mat-progress-bar 
+                mode="determinate" 
+                [value]="parseFloat(cpuPercentage())"
+                [color]="parseFloat(cpuPercentage()) > 80 ? 'warn' : 'primary'">
+              </mat-progress-bar>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <!-- Memory Card -->
+        <mat-card>
+          <mat-card-header>
+            <mat-icon mat-card-avatar color="accent">sd_card</mat-icon>
+            <mat-card-title>Memory Usage</mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="resource-display">
+              <div class="resource-value">
+                {{ formatBytes(vm()?.mem || 0) }} / {{ formatBytes(vm()?.maxmem || 0) }}
+              </div>
+              <mat-progress-bar 
+                mode="determinate" 
+                [value]="memoryPercentage()"
+                color="accent">
+              </mat-progress-bar>
+              <div class="resource-percentage">{{ memoryPercentage().toFixed(1) }}%</div>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <!-- Disk Card -->
+        <mat-card>
+          <mat-card-header>
+            <mat-icon mat-card-avatar>storage</mat-icon>
+            <mat-card-title>Disk Usage</mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="resource-display">
+              <div class="resource-value">
+                {{ formatBytes(vm()?.disk || 0) }} / {{ formatBytes(vm()?.maxdisk || 0) }}
+              </div>
+              <mat-progress-bar 
+                mode="determinate" 
+                [value]="vm()?.maxdisk ? (vm()!.disk! / vm()!.maxdisk! * 100) : 0">
+              </mat-progress-bar>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <!-- Uptime Card -->
+        <mat-card>
+          <mat-card-header>
+            <mat-icon mat-card-avatar>schedule</mat-icon>
+            <mat-card-title>Uptime</mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="resource-display">
+              <div class="resource-value">{{ formatUptime(vm()?.uptime || 0) }}</div>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      </div>
+
+      <!-- Tabs Section -->
+      <mat-card class="tabs-card">
+        <mat-tab-group>
+          <!-- Overview Tab -->
+          <mat-tab label="Overview">
+            <div class="tab-content">
+              <!-- IP Addresses -->
+              <mat-card class="info-card">
+                <app-vm-ip-management
+                  [nodeId]="nodeId()"
+                  [vmid]="vmid()"
+                  [vmName]="vm()?.name">
+                </app-vm-ip-management>
+              </mat-card>
+
+              <!-- VM Information -->
+              <mat-card class="info-card">
+                <mat-card-header>
+                  <mat-card-title>VM Information</mat-card-title>
+                </mat-card-header>
+                <mat-card-content>
+                  <div class="info-grid">
+                    <div class="info-item">
+                      <span class="info-label">VM ID</span>
+                      <span class="info-value">{{ vmid() }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">Name</span>
+                      <span class="info-value">{{ vm()?.name || 'N/A' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">Status</span>
+                      <span class="info-value">
+                        <app-status-badge 
+                          [status]="getStatusType(vm()?.status || '')"
+                          [label]="(vm()?.status || 'Unknown') | titlecase">
+                        </app-status-badge>
+                      </span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">Type</span>
+                      <span class="info-value">{{ vm()?.type || 'N/A' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">CPU Cores</span>
+                      <span class="info-value">{{ vm()?.cpus || 'N/A' }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">Max Memory</span>
+                      <span class="info-value">{{ formatBytes(vm()?.maxmem || 0) }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">Max Disk</span>
+                      <span class="info-value">{{ formatBytes(vm()?.maxdisk || 0) }}</span>
+                    </div>
+                    <div class="info-item">
+                      <span class="info-label">Uptime</span>
+                      <span class="info-value">{{ formatUptime(vm()?.uptime || 0) }}</span>
+                    </div>
+                  </div>
+                </mat-card-content>
+              </mat-card>
+            </div>
+          </mat-tab>
+
+          <!-- Stats Tab -->
+          <mat-tab label="Statistics">
+            <div class="tab-content">
+              <app-vm-monitoring 
+                [nodeId]="nodeId()" 
+                [vmid]="vmid()">
+              </app-vm-monitoring>
+            </div>
+          </mat-tab>
+
+          <!-- Snapshots Tab -->
+          <mat-tab label="Snapshots">
+            <div class="tab-content">
+              <app-vm-snapshots 
+                [nodeId]="nodeId()" 
+                [vmid]="vmid()">
+              </app-vm-snapshots>
+            </div>
+          </mat-tab>
+
+          <!-- Disks Tab -->
+          <mat-tab label="Disks">
+            <div class="tab-content">
+              <app-vm-disks 
+                [nodeId]="nodeId()" 
+                [vmid]="vmid()">
+              </app-vm-disks>
+            </div>
+          </mat-tab>
+
+          <!-- Network Tab -->
+          <mat-tab label="Network">
+            <div class="tab-content">
+              <app-vm-network 
+                [nodeId]="nodeId()" 
+                [vmid]="vmid()">
+              </app-vm-network>
+            </div>
+          </mat-tab>
+
+          <!-- Console Tab -->
+          <mat-tab label="Console">
+            <div class="tab-content">
+              <app-vm-console 
+                [nodeId]="nodeId()" 
+                [vmid]="vmid()">
+              </app-vm-console>
+            </div>
+          </mat-tab>
+
+          <!-- Provisioning Tab -->
+          <mat-tab label="Provisioning">
+            <div class="tab-content">
+              <app-vm-cloud-init-display 
+                [nodeId]="nodeId()" 
+                [vmid]="vmid()">
+              </app-vm-cloud-init-display>
+            </div>
+          </mat-tab>
+        </mat-tab-group>
+      </mat-card>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,52 @@
+<h2 mat-dialog-title>Boot Order for {{ data.vmName }}</h2>
+
+<mat-dialog-content>
+  <p class="helper-text">Drag to reorder devices and toggle which ones are active.</p>
+
+  <div *ngIf="loading()" class="loading">
+    <mat-spinner diameter="40"></mat-spinner>
+    <p>Loading current boot order...</p>
+  </div>
+
+  <div *ngIf="!loading()" class="content">
+    <div cdkDropList class="device-list" (cdkDropListDropped)="drop($event)">
+      <div
+        class="device-row"
+        *ngFor="let device of order(); trackBy: trackByCode"
+        cdkDrag
+      >
+        <button mat-icon-button class="drag-handle" cdkDragHandle aria-label="Reorder">
+          <mat-icon>drag_indicator</mat-icon>
+        </button>
+        <div class="device-info">
+          <div class="device-label">{{ device.label }}</div>
+          <div class="device-desc">{{ device.description }}</div>
+        </div>
+        <mat-slide-toggle
+          color="primary"
+          [checked]="included().has(device.code)"
+          (change)="toggleInclude(device.code, $event.checked)"
+        >
+          {{ device.code | uppercase }}
+        </mat-slide-toggle>
+      </div>
+    </div>
+
+    <div class="summary">
+      <div class="summary-row">
+        <span>Resulting order</span>
+        <span class="order-value">{{ bootOrderString() }}</span>
+      </div>
+      <p class="hint">Codes: c = disk, d = cdrom, n = network, a = floppy</p>
+    </div>
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="resetToDefault()" [disabled]="saving()">Reset to Default</button>
+  <button mat-button (click)="cancel()" [disabled]="saving()">Cancel</button>
+  <button mat-raised-button color="primary" (click)="save()" [disabled]="saving() || loading()">
+    <mat-spinner *ngIf="saving()" diameter="16"></mat-spinner>
+    <span *ngIf="!saving()">Save</span>
+  </button>
+</mat-dialog-actions>

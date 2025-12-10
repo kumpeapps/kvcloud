@@ -1,0 +1,129 @@
+<div class="snapshots-container">
+  <div class="snapshots-header">
+    <h2>Snapshots</h2>
+    <button mat-raised-button color="primary" 
+            (click)="toggleCreateForm()"
+            [disabled]="loading()">
+      <mat-icon>{{ showCreateForm() ? 'close' : 'add' }}</mat-icon>
+      {{ showCreateForm() ? 'Cancel' : 'Create Snapshot' }}
+    </button>
+  </div>
+
+  @if (showCreateForm()) {
+    <mat-card class="create-form">
+      <mat-card-content>
+        <form [formGroup]="createForm" (ngSubmit)="createSnapshot()">
+          <div class="form-fields">
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Snapshot Name</mat-label>
+              <input matInput formControlName="snapname" 
+                     placeholder="e.g., before-update" required>
+              <mat-hint>Letters, numbers, dashes, and underscores only</mat-hint>
+              <mat-error>Please enter a valid snapshot name</mat-error>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>Description</mat-label>
+              <textarea matInput formControlName="description" 
+                        placeholder="Optional description"
+                        rows="3"></textarea>
+            </mat-form-field>
+          </div>
+
+          <div class="form-actions">
+            <button mat-raised-button color="primary" 
+                    type="submit"
+                    [disabled]="!createForm.valid || loading()">
+              <mat-icon>save</mat-icon>
+              Create Snapshot
+            </button>
+          </div>
+        </form>
+      </mat-card-content>
+    </mat-card>
+  }
+
+  @if (loading() && !showCreateForm()) {
+    <div class="loading-container">
+      <mat-spinner diameter="40"></mat-spinner>
+      <p>Loading snapshots...</p>
+    </div>
+  }
+
+  @if (error() && !loading()) {
+    <mat-card class="error-card">
+      <mat-card-content>
+        <mat-icon color="warn">error</mat-icon>
+        <span>{{ error() }}</span>
+      </mat-card-content>
+    </mat-card>
+  }
+
+  @if (!loading() && !error() && snapshots().length === 0) {
+    <mat-card class="empty-state">
+      <mat-card-content>
+        <mat-icon>photo_library</mat-icon>
+        <h3>No Snapshots</h3>
+        <p>Create a snapshot to save the current state of your VM</p>
+      </mat-card-content>
+    </mat-card>
+  }
+
+  @if (!loading() && snapshots().length > 0) {
+    <mat-card>
+      <mat-card-content class="table-container">
+        <table mat-table [dataSource]="snapshots()" class="snapshots-table">
+          <!-- Name Column -->
+          <ng-container matColumnDef="name">
+            <th mat-header-cell *matHeaderCellDef>Name</th>
+            <td mat-cell *matCellDef="let snapshot">
+              <strong>{{ snapshot.name }}</strong>
+            </td>
+          </ng-container>
+
+          <!-- Description Column -->
+          <ng-container matColumnDef="description">
+            <th mat-header-cell *matHeaderCellDef>Description</th>
+            <td mat-cell *matCellDef="let snapshot">
+              {{ snapshot.description || 'No description' }}
+            </td>
+          </ng-container>
+
+          <!-- Date Column -->
+          <ng-container matColumnDef="snaptime">
+            <th mat-header-cell *matHeaderCellDef>Created</th>
+            <td mat-cell *matCellDef="let snapshot">
+              {{ formatDate(snapshot.snaptime) }}
+            </td>
+          </ng-container>
+
+          <!-- Actions Column -->
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef>Actions</th>
+            <td mat-cell *matCellDef="let snapshot">
+              <div class="action-buttons">
+                <button mat-icon-button 
+                        [matTooltip]="'Rollback to this snapshot'"
+                        color="primary"
+                        (click)="rollbackSnapshot(snapshot.name)"
+                        [disabled]="loading()">
+                  <mat-icon>restore</mat-icon>
+                </button>
+                <button mat-icon-button 
+                        [matTooltip]="'Delete snapshot'"
+                        color="warn"
+                        (click)="deleteSnapshot(snapshot.name)"
+                        [disabled]="loading()">
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </div>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+        </table>
+      </mat-card-content>
+    </mat-card>
+  }
+</div>

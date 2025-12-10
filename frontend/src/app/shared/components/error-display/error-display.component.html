@@ -1,0 +1,24 @@
+<div class="error-container" *ngIf="errorDetails">
+  <mat-card class="error-card">
+    <mat-card-header>
+      <mat-icon class="error-icon" color="warn">error_outline</mat-icon>
+      <mat-card-title>{{ errorDetails.title || 'Error' }}</mat-card-title>
+      <mat-card-subtitle *ngIf="errorDetails.statusCode">
+        Error Code: {{ errorDetails.statusCode }}
+      </mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content>
+      <p class="error-message">{{ errorDetails.message }}</p>
+      <details *ngIf="errorDetails.details" class="error-details">
+        <summary>Technical Details</summary>
+        <pre>{{ errorDetails.details }}</pre>
+      </details>
+    </mat-card-content>
+    <mat-card-actions *ngIf="showRetry">
+      <button mat-raised-button color="primary" (click)="onRetry()">
+        <mat-icon>refresh</mat-icon>
+        Retry
+      </button>
+    </mat-card-actions>
+  </mat-card>
+</div>

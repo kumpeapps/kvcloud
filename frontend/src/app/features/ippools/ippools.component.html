@@ -1,0 +1,311 @@
+<div class="ippools-container">
+  <div class="header">
+    <h1>IP Pool Management</h1>
+    <button
+      mat-raised-button
+      color="primary"
+      *hasPermission="{ resource: 'ippool', action: 'create' }"
+      (click)="openCreatePoolDialog()">
+      <mat-icon>add</mat-icon>
+      Create IP Pool
+    </button>
+  </div>
+
+  <app-loading-spinner *ngIf="loading()" />
+
+  <div class="content" *ngIf="!loading()">
+    <!-- Pools List -->
+    <mat-card class="pools-card">
+      <mat-card-header>
+        <mat-card-title>IP Pools</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <app-empty-state
+          *ngIf="pools().length === 0"
+          icon="network_check"
+          title="No IP Pools"
+          message="Create your first IP pool to manage IP addresses"
+          [actionButton]="canCreatePool() ? 'Create IP Pool' : undefined"
+          (action)="openCreatePoolDialog()"
+        />
+
+        <mat-list *ngIf="pools().length > 0">
+          <mat-list-item
+            *ngFor="let pool of pools()"
+            [class.selected]="selectedPool()?.id === pool.id"
+            (click)="selectPool(pool)">
+            <mat-icon matListItemIcon>cloud_circle</mat-icon>
+            <div matListItemTitle>{{ pool.name }}</div>
+            <div matListItemLine>
+              {{ pool.gateway }} / {{ pool.netmask }} ({{ pool.bridge }})
+            </div>
+            <div matListItemLine class="pool-stats">
+              <span>{{ pool.allocated_ips }} / {{ pool.total_ips }} allocated</span>
+              <mat-progress-bar
+                mode="determinate"
+                [value]="getUtilizationPercentage(pool)"
+                [color]="getUtilizationColor(pool)">
+              </mat-progress-bar>
+            </div>
+            <button
+              matListItemMeta
+              mat-icon-button
+              color="warn"
+              *hasPermission="{ resource: 'ippool', action: 'delete' }"
+              (click)="deletePool(pool); $event.stopPropagation()">
+              <mat-icon>delete</mat-icon>
+            </button>
+          </mat-list-item>
+        </mat-list>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- IPs List -->
+    <mat-card class="ips-card" *ngIf="selectedPool()">
+      <mat-card-header>
+        <mat-card-title>IP Addresses - {{ selectedPool()?.name }}</mat-card-title>
+        <button
+          mat-icon-button
+          [matTooltip]="showAllocatedOnly() ? 'Show all IPs' : 'Show allocated only'"
+          (click)="toggleAllocatedFilter()">
+          <mat-icon>{{ showAllocatedOnly() ? 'filter_list_off' : 'filter_list' }}</mat-icon>
+        </button>
+      </mat-card-header>
+      <mat-card-content>
+        <app-loading-spinner *ngIf="ipsLoading()" />
+
+        <table mat-table [dataSource]="poolIPs()" *ngIf="!ipsLoading() && poolIPs().length > 0">
+          <!-- IP Address Column -->
+          <ng-container matColumnDef="ip_address">
+            <th mat-header-cell *matHeaderCellDef>IP Address</th>
+            <td mat-cell *matCellDef="let ip">{{ ip.ip_address }}</td>
+          </ng-container>
+
+          <!-- Status Column -->
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef>Status</th>
+            <td mat-cell *matCellDef="let ip">
+              <mat-chip [class.allocated]="ip.is_allocated" [class.available]="!ip.is_allocated">
+                {{ ip.is_allocated ? 'Allocated' : 'Available' }}
+              </mat-chip>
+            </td>
+          </ng-container>
+
+          <!-- VM ID Column -->
+          <ng-container matColumnDef="vm_id">
+            <th mat-header-cell *matHeaderCellDef>VM ID</th>
+            <td mat-cell *matCellDef="let ip">{{ ip.vm_id || '-' }}</td>
+          </ng-container>
+
+          <!-- Hostname Column -->
+          <ng-container matColumnDef="hostname">
+            <th mat-header-cell *matHeaderCellDef>Hostname</th>
+            <td mat-cell *matCellDef="let ip">{{ ip.hostname || '-' }}</td>
+          </ng-container>
+
+          <!-- MAC Address Column -->
+          <ng-container matColumnDef="mac_address">
+            <th mat-header-cell *matHeaderCellDef>MAC Address</th>
+            <td mat-cell *matCellDef="let ip">{{ ip.mac_address || '-' }}</td>
+          </ng-container>
+
+          <!-- Allocated At Column -->
+          <ng-container matColumnDef="allocated_at">
+            <th mat-header-cell *matHeaderCellDef>Allocated At</th>
+            <td mat-cell *matCellDef="let ip">
+              {{ ip.allocated_at ? (ip.allocated_at | date:'short') : '-' }}
+            </td>
+          </ng-container>
+
+          <!-- Actions Column -->
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef>Actions</th>
+            <td mat-cell *matCellDef="let ip">
+              <button
+                mat-icon-button
+                color="primary"
+                *ngIf="!ip.is_allocated"
+                [disableIfNoPermission]="{ resource: 'ippool', action: 'allocate' }"
+                [matTooltip]="'Allocate to VM'"
+                (click)="openAllocateDialog(ip)">
+                <mat-icon>link</mat-icon>
+              </button>
+              <button
+                mat-icon-button
+                color="warn"
+                *ngIf="ip.is_allocated"
+                [disableIfNoPermission]="{ resource: 'ippool', action: 'deallocate' }"
+                [matTooltip]="'Deallocate IP'"
+                (click)="deallocateIP(ip)">
+                <mat-icon>link_off</mat-icon>
+              </button>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+        </table>
+
+        <app-empty-state
+          *ngIf="!ipsLoading() && poolIPs().length === 0"
+          icon="network_check"
+          [title]="showAllocatedOnly() ? 'No Allocated IPs' : 'No IP Addresses'"
+          message="No IP addresses found in this pool"
+        />
+      </mat-card-content>
+    </mat-card>
+  </div>
+</div>
+
+<!-- Create Pool Dialog -->
+<div class="dialog-overlay" *ngIf="showPoolForm()" (click)="closePoolForm()">
+  <div class="dialog-container" (click)="$event.stopPropagation()">
+    <h2 mat-dialog-title>Create IP Pool</h2>
+    <form [formGroup]="poolForm" (ngSubmit)="createPool()">
+      <mat-dialog-content>
+        <mat-form-field appearance="outline">
+          <mat-label>Pool Name</mat-label>
+          <input matInput formControlName="name" placeholder="e.g., Production Network" />
+          <mat-error *ngIf="poolForm.get('name')?.hasError('required')">
+            Name is required
+          </mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Gateway</mat-label>
+          <input matInput formControlName="gateway" placeholder="192.168.1.1" />
+          <mat-error *ngIf="poolForm.get('gateway')?.hasError('required')">
+            Gateway is required
+          </mat-error>
+          <mat-error *ngIf="poolForm.get('gateway')?.hasError('pattern')">
+            Invalid IP address format
+          </mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Netmask</mat-label>
+          <input matInput formControlName="netmask" placeholder="255.255.255.0 or /24" />
+          <mat-error *ngIf="poolForm.get('netmask')?.hasError('required')">
+            Netmask is required
+          </mat-error>
+        </mat-form-field>
+
+        <div class="form-row">
+          <mat-form-field appearance="outline">
+            <mat-label>First IP</mat-label>
+            <input matInput formControlName="first_ip" placeholder="192.168.1.10" />
+            <mat-error *ngIf="poolForm.get('first_ip')?.hasError('required')">
+              First IP is required
+            </mat-error>
+            <mat-error *ngIf="poolForm.get('first_ip')?.hasError('pattern')">
+              Invalid IP format
+            </mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Last IP</mat-label>
+            <input matInput formControlName="last_ip" placeholder="192.168.1.254" />
+            <mat-error *ngIf="poolForm.get('last_ip')?.hasError('required')">
+              Last IP is required
+            </mat-error>
+            <mat-error *ngIf="poolForm.get('last_ip')?.hasError('pattern')">
+              Invalid IP format
+            </mat-error>
+          </mat-form-field>
+        </div>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Bridge</mat-label>
+          <input matInput formControlName="bridge" placeholder="vmbr0" />
+          <mat-error *ngIf="poolForm.get('bridge')?.hasError('required')">
+            Bridge is required
+          </mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>VLAN Tag (Optional)</mat-label>
+          <input matInput type="number" formControlName="vlan_tag" placeholder="100" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Name Servers (Optional)</mat-label>
+          <input matInput formControlName="name_servers" placeholder="8.8.8.8,8.8.4.4" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Description (Optional)</mat-label>
+          <textarea matInput formControlName="description" rows="3"></textarea>
+        </mat-form-field>
+      </mat-dialog-content>
+
+      <mat-dialog-actions align="end">
+        <button mat-button type="button" (click)="closePoolForm()">Cancel</button>
+        <button mat-raised-button color="primary" type="submit" [disabled]="poolForm.invalid">
+          Create Pool
+        </button>
+      </mat-dialog-actions>
+    </form>
+  </div>
+</div>
+
+<!-- Allocate IP Dialog -->
+<div class="dialog-overlay" *ngIf="showAllocateForm()" (click)="closeAllocateDialog()">
+  <div class="dialog-container" (click)="$event.stopPropagation()">
+    <h2 mat-dialog-title>Allocate IP</h2>
+    <form [formGroup]="allocateForm" (ngSubmit)="allocateSelectedIP()">
+      <mat-dialog-content>
+        <p *ngIf="ipToAllocate()">IP: <strong>{{ ipToAllocate()!.ip_address }}</strong> from pool <strong>{{ selectedPool()?.name }}</strong></p>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Select Node</mat-label>
+          <mat-select [value]="selectedNodeId()" (selectionChange)="onNodeChange($event.value)">
+            <mat-option *ngFor="let node of nodes()" [value]="node.id">
+              {{ node.name }} ({{ node.host }})
+            </mat-option>
+          </mat-select>
+          <mat-error *ngIf="allocateForm.get('node_id')?.hasError('required')">
+            Node is required
+          </mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Select VM</mat-label>
+          <mat-select formControlName="vm_id">
+            <mat-option *ngFor="let vm of vms()" [value]="vm.vmid">
+              {{ vm.name || ('VM-' + vm.vmid) }} ({{ vm.vmid }})
+            </mat-option>
+          </mat-select>
+          <mat-error *ngIf="allocateForm.get('vm_id')?.hasError('required')">
+            VM is required
+          </mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Hostname (optional)</mat-label>
+          <input matInput formControlName="hostname" placeholder="vm01" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>MAC Address (optional)</mat-label>
+          <input matInput formControlName="mac_address" placeholder="AA:BB:CC:DD:EE:FF" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Notes (optional)</mat-label>
+          <textarea matInput formControlName="notes" rows="2"></textarea>
+        </mat-form-field>
+
+        <mat-checkbox formControlName="alsoSetVmNetworkConfig">Also set VM network config</mat-checkbox>
+        <p class="helper-text">Gateway and DNS will be derived from pool settings.</p>
+      </mat-dialog-content>
+
+      <mat-dialog-actions align="end">
+        <button mat-button type="button" (click)="closeAllocateDialog()">Cancel</button>
+        <button mat-raised-button color="primary" type="submit" [disabled]="allocateForm.invalid">
+          Allocate
+        </button>
+      </mat-dialog-actions>
+    </form>
+  </div>
+  
+</div>

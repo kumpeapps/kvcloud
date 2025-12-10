@@ -1,0 +1,12 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies ignoring scripts that have permission issues
+RUN npm install --ignore-scripts
+
+# The source will be mounted as volume
+# Development server will be started by docker-compose command

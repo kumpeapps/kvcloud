@@ -1,0 +1,454 @@
+<div class="monitoring-container">
+  <!-- Header with Controls -->
+  <div class="monitoring-header">
+    <div class="header-left">
+      <h1><mat-icon>monitoring</mat-icon> Monitoring Dashboard</h1>
+      <p class="subtitle">Real-time infrastructure metrics and performance analytics</p>
+    </div>
+    <div class="header-right">
+      <mat-form-field appearance="outline" class="duration-selector">
+        <mat-label>Duration</mat-label>
+        <mat-select [value]="durationMinutes()" (selectionChange)="durationMinutes.set($event.value); onDurationChange()">
+          <mat-option [value]="15">Last 15 minutes</mat-option>
+          <mat-option [value]="30">Last 30 minutes</mat-option>
+          <mat-option [value]="60">Last 1 hour</mat-option>
+          <mat-option [value]="120">Last 2 hours</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <button mat-icon-button (click)="refreshMetrics()" [disabled]="loading()" matTooltip="Refresh metrics">
+        <mat-icon>refresh</mat-icon>
+      </button>
+
+      <mat-slide-toggle [checked]="autoRefresh()" (change)="autoRefresh.set($event.checked)" matTooltip="Auto-refresh every 30 seconds">
+        <mat-icon class="toggle-icon">{{ autoRefresh() ? 'schedule' : 'schedule_off' }}</mat-icon>
+      </mat-slide-toggle>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  <app-loading-spinner *ngIf="loading()" message="Loading cluster data..."></app-loading-spinner>
+
+  <div *ngIf="!loading()" class="monitoring-content">
+    <!-- Cluster Overview Tab -->
+    <mat-tab-group [(selectedIndex)]="selectedTab" class="monitoring-tabs">
+      <!-- Overview Tab -->
+      <mat-tab label="Overview">
+        <div class="tab-content">
+          <!-- Cluster Summary Cards -->
+          <div class="metrics-grid cluster-metrics" *ngIf="clusterMetrics() as metrics">
+            <mat-card class="metric-card">
+              <mat-card-header>
+                <mat-card-title>
+                  <mat-icon>speed</mat-icon>
+                  CPU Usage
+                </mat-card-title>
+              </mat-card-header>
+              <mat-card-content>
+                <div class="metric-value" [ngClass]="'color-' + getResourceColor(metrics.cpu_usage_percent)">
+                  {{ formatNumber(metrics.cpu_usage_percent, 1) }}%
+                </div>
+                <mat-progress-bar 
+                  mode="determinate" 
+                  [value]="metrics.cpu_usage_percent"
+                  [ngClass]="'progress-' + getResourceColor(metrics.cpu_usage_percent)">
+                </mat-progress-bar>
+                <div class="metric-details">
+                  <span>Total Cores: {{ metrics.total_cpu_cores }}</span>
+                </div>
+              </mat-card-content>
+            </mat-card>
+
+            <mat-card class="metric-card">
+              <mat-card-header>
+                <mat-card-title>
+                  <mat-icon>memory</mat-icon>
+                  Memory Usage
+                </mat-card-title>
+              </mat-card-header>
+              <mat-card-content>
+                <div class="metric-value" [ngClass]="'color-' + getResourceColor(metrics.memory_usage_percent)">
+                  {{ formatNumber(metrics.memory_usage_percent, 1) }}%
+                </div>
+                <mat-progress-bar 
+                  mode="determinate" 
+                  [value]="metrics.memory_usage_percent"
+                  [ngClass]="'progress-' + getResourceColor(metrics.memory_usage_percent)">
+                </mat-progress-bar>
+                <div class="metric-details">
+                  <span>Total: {{ metrics.total_memory_gb }} GB</span>
+                </div>
+              </mat-card-content>
+            </mat-card>
+
+            <mat-card class="metric-card">
+              <mat-card-header>
+                <mat-card-title>
+                  <mat-icon>storage</mat-icon>
+                  Storage Usage
+                </mat-card-title>
+              </mat-card-header>
+              <mat-card-content>
+                <div class="metric-value" [ngClass]="'color-' + getResourceColor(metrics.storage_usage_percent)">
+                  {{ formatNumber(metrics.storage_usage_percent, 1) }}%
+                </div>
+                <mat-progress-bar 
+                  mode="determinate" 
+                  [value]="metrics.storage_usage_percent"
+                  [ngClass]="'progress-' + getResourceColor(metrics.storage_usage_percent)">
+                </mat-progress-bar>
+                <div class="metric-details">
+                  <span>Total: {{ metrics.total_storage_gb }} GB</span>
+                </div>
+              </mat-card-content>
+            </mat-card>
+          </div>
+
+          <!-- Cluster Stats Cards -->
+          <div class="cluster-stats" *ngIf="clusterMetrics() as metrics">
+            <mat-card class="stat-card">
+              <mat-card-header>
+                <mat-card-title>
+                  <mat-icon>storage</mat-icon>
+                  Nodes
+                </mat-card-title>
+              </mat-card-header>
+              <mat-card-content>
+                <div class="stat-number">{{ metrics.nodes_online + metrics.nodes_offline }}</div>
+              </mat-card-content>
+            </mat-card>
+
+            <mat-card class="stat-card">
+              <mat-card-header>
+                <mat-card-title>
+                  <mat-icon>cloud</mat-icon>
+                  Virtual Machines
+                </mat-card-title>
+              </mat-card-header>
+              <mat-card-content>
+                <div class="stat-number">{{ metrics.vms_running + metrics.vms_stopped }}</div>
+              </mat-card-content>
+            </mat-card>
+
+            <mat-card class="stat-card">
+              <mat-card-header>
+                <mat-card-title>
+                  <mat-icon>schedule</mat-icon>
+                  Last Updated
+                </mat-card-title>
+              </mat-card-header>
+              <mat-card-content>
+                <div class="stat-time">{{ formatTimestamp(metrics.timestamp) }}</div>
+              </mat-card-content>
+            </mat-card>
+          </div>
+
+          <!-- Empty State -->
+          <app-empty-state 
+            *ngIf="!clusterMetrics()"
+            icon="bar_chart"
+            title="No Data Available"
+            message="Unable to load cluster metrics">
+          </app-empty-state>
+        </div>
+      </mat-tab>
+
+      <!-- Nodes Tab -->
+      <mat-tab label="Nodes">
+        <div class="tab-content">
+          <!-- Node Selection -->
+          <div class="selection-controls" *ngIf="nodes().length > 0">
+            <mat-form-field appearance="outline" class="node-selector">
+              <mat-label>Select Node</mat-label>
+              <mat-select [value]="selectedNode()" (selectionChange)="selectNode($event.value)">
+                <mat-option *ngFor="let node of nodes()" [value]="node">
+                  {{ node.name }} ({{ node.host }})
+                </mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+
+          <!-- Node Metrics Chart -->
+          <div *ngIf="selectedNode() && nodeMetrics() as metrics" class="chart-container">
+            <mat-card class="chart-card">
+              <mat-card-header>
+                <mat-card-title>
+                  <mat-icon>trending_up</mat-icon>
+                  Node Metrics: {{ metrics.node_name }}
+                </mat-card-title>
+              </mat-card-header>
+              <mat-card-content>
+                <div *ngIf="nodeChartConfig()" class="chart-wrapper">
+                  <canvas 
+                    baseChart
+                    [type]="nodeChartConfig().type"
+                    [data]="nodeChartConfig().data"
+                    [options]="nodeChartConfig().options">
+                  </canvas>
+                </div>
+              </mat-card-content>
+            </mat-card>
+
+            <!-- Node Details -->
+            <mat-card class="details-card">
+              <mat-card-header>
+                <mat-card-title>Node Information</mat-card-title>
+              </mat-card-header>
+              <mat-card-content>
+                <div class="details-grid">
+                  <div class="detail-item">
+                    <span class="detail-label">Node ID:</span>
+                    <span class="detail-value">{{ metrics.node_id }}</span>
+                  </div>
+                  <div class="detail-item">
+                    <span class="detail-label">Uptime:</span>
+                    <span class="detail-value">{{ formatNumber((metrics.uptime || 0) / 86400, 1) }} days</span>
+                  </div>
+                  <div class="detail-item">
+                    <span class="detail-label">Load Average:</span>
+                    <span class="detail-value">{{ formatNumber((metrics.load_average?.[0] || 0), 2) }}</span>
+                  </div>
+                </div>
+              </mat-card-content>
+            </mat-card>
+          </div>
+
+          <!-- No Node Selected -->
+          <app-empty-state 
+            *ngIf="!selectedNode() || !nodeMetrics()"
+            icon="cloud_off"
+            title="No Node Selected"
+            message="Select a node to view its metrics">
+          </app-empty-state>
+        </div>
+      </mat-tab>
+
+      <!-- VMs Tab -->
+      <mat-tab label="Virtual Machines">
+        <div class="tab-content">
+          <!-- VM Selection -->
+          <div class="selection-controls" *ngIf="selectedNode() && vms().length > 0">
+            <mat-form-field appearance="outline" class="node-selector">
+              <mat-label>Node: {{ selectedNode()?.name }}</mat-label>
+              <mat-select disabled>
+                <mat-option [value]="selectedNode()">{{ selectedNode()?.name }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="vm-selector">
+              <mat-label>Select VM</mat-label>
+              <mat-select [value]="selectedVM()" (selectionChange)="selectVM($event.value)">
+                <mat-option *ngFor="let vm of vms()" [value]="vm">
+                  {{ vm.name }} ({{ vm.vmid }})
+                </mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+
+          <!-- VM Metrics Chart -->
+          <div *ngIf="selectedVM() && vmMetrics() as metrics" class="chart-container">
+            <mat-card class="chart-card">
+              <mat-card-header>
+                <mat-card-title>
+                  <mat-icon>trending_up</mat-icon>
+                  VM Metrics: {{ metrics.vm_name }}
+                </mat-card-title>
+              </mat-card-header>
+              <mat-card-content>
+                <div *ngIf="vmChartConfig()" class="chart-wrapper">
+                  <canvas 
+                    baseChart
+                    [type]="vmChartConfig().type"
+                    [data]="vmChartConfig().data"
+                    [options]="vmChartConfig().options">
+                  </canvas>
+                </div>
+              </mat-card-content>
+            </mat-card>
+
+            <!-- VM Details -->
+            <mat-card class="details-card">
+              <mat-card-header>
+                <mat-card-title>VM Information</mat-card-title>
+              </mat-card-header>
+              <mat-card-content>
+                <div class="details-grid">
+                  <div class="detail-item">
+                    <span class="detail-label">VM ID:</span>
+                    <span class="detail-value">{{ metrics.vmid }}</span>
+                  </div>
+                  <div class="detail-item">
+                    <span class="detail-label">Current CPU Usage:</span>
+                    <span class="detail-value">{{ formatNumber(getLatestMetricValue(metrics.cpu), 1) }}%</span>
+                  </div>
+                  <div class="detail-item">
+                    <span class="detail-label">Current Memory Usage:</span>
+                    <span class="detail-value">{{ formatNumber(getLatestMetricValue(metrics.memory), 1) }}%</span>
+                  </div>
+                </div>
+              </mat-card-content>
+            </mat-card>
+          </div>
+
+          <!-- No VM Selected -->
+          <app-empty-state 
+            *ngIf="!selectedVM() || !vmMetrics()"
+            icon="cloud_off"
+            title="No VM Selected"
+            message="Select a VM to view its metrics">
+          </app-empty-state>
+        </div>
+      </mat-tab>
+
+      <!-- Historical Tab -->
+      <mat-tab label="History">
+        <div class="tab-content history-tab">
+          <div class="history-controls">
+            <mat-button-toggle-group
+              [value]="historyResource()"
+              (change)="onHistoryResourceChange($event.value)">
+              <mat-button-toggle value="node">Node</mat-button-toggle>
+              <mat-button-toggle value="vm">VM</mat-button-toggle>
+            </mat-button-toggle-group>
+
+            <mat-form-field appearance="outline" class="timeframe-selector">
+              <mat-label>Timeframe</mat-label>
+              <mat-select [value]="historyTimeframe()" (selectionChange)="onHistoryTimeframeChange($event.value)">
+                <mat-option value="hour">Last hour</mat-option>
+                <mat-option value="day">Last day</mat-option>
+                <mat-option value="week">Last week</mat-option>
+                <mat-option value="month">Last month</mat-option>
+                <mat-option value="year">Last year</mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="datetime-field">
+              <mat-label>Start</mat-label>
+              <input matInput type="datetime-local"
+                     [value]="historyStart() || ''"
+                     (change)="historyStart.set($any($event.target).value || null)">
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="datetime-field">
+              <mat-label>End</mat-label>
+              <input matInput type="datetime-local"
+                     [value]="historyEnd() || ''"
+                     (change)="historyEnd.set($any($event.target).value || null)">
+            </mat-form-field>
+
+            <button mat-raised-button color="primary" (click)="loadHistory()">
+              <mat-icon>history</mat-icon>
+              Load History
+            </button>
+          </div>
+
+          <div class="history-selection" *ngIf="historyResource() === 'node'">
+            <mat-form-field appearance="outline" class="node-selector">
+              <mat-label>Select Node</mat-label>
+              <mat-select [value]="selectedNode()" (selectionChange)="selectNode($event.value)">
+                <mat-option *ngFor="let node of nodes()" [value]="node">{{ node.name }} ({{ node.host }})</mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+
+          <div class="history-selection" *ngIf="historyResource() === 'vm'">
+            <mat-form-field appearance="outline" class="node-selector">
+              <mat-label>Node</mat-label>
+              <mat-select [value]="selectedNode()" (selectionChange)="selectNode($event.value)">
+                <mat-option *ngFor="let node of nodes()" [value]="node">{{ node.name }} ({{ node.host }})</mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="vm-selector">
+              <mat-label>VM</mat-label>
+              <mat-select [value]="selectedVM()" (selectionChange)="selectVM($event.value)">
+                <mat-option *ngFor="let vm of vms()" [value]="vm">{{ vm.name }} ({{ vm.vmid }})</mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+
+          <app-loading-spinner *ngIf="historyLoading()" message="Loading historical metrics..."></app-loading-spinner>
+
+          <div *ngIf="!historyLoading() && historyAggregate() as agg" class="history-aggregates">
+            <mat-card>
+              <mat-card-title>CPU</mat-card-title>
+              <mat-card-content>
+                <div class="aggregate-value">Avg: {{ formatNumber(agg.avg_cpu_usage || 0, 2) }}%</div>
+                <div class="aggregate-sub">Max: {{ formatNumber(agg.max_cpu_usage || 0, 2) }}%</div>
+              </mat-card-content>
+            </mat-card>
+
+            <mat-card>
+              <mat-card-title>Memory</mat-card-title>
+              <mat-card-content>
+                <div class="aggregate-value">Avg: {{ formatNumber(agg.avg_memory_usage_percent || 0, 2) }}%</div>
+                <div class="aggregate-sub">Max: {{ formatNumber(agg.max_memory_usage_percent || 0, 2) }}%</div>
+              </mat-card-content>
+            </mat-card>
+
+            <mat-card>
+              <mat-card-title>Disk IO</mat-card-title>
+              <mat-card-content>
+                <div class="aggregate-value">Read: {{ formatBytesCompact(agg.total_disk_read_bytes) }}</div>
+                <div class="aggregate-sub">Write: {{ formatBytesCompact(agg.total_disk_write_bytes) }}</div>
+              </mat-card-content>
+            </mat-card>
+
+            <mat-card>
+              <mat-card-title>Network</mat-card-title>
+              <mat-card-content>
+                <div class="aggregate-value">In: {{ formatBytesCompact(agg.total_network_in_bytes) }}</div>
+                <div class="aggregate-sub">Out: {{ formatBytesCompact(agg.total_network_out_bytes) }}</div>
+              </mat-card-content>
+            </mat-card>
+
+            <mat-card>
+              <mat-card-title>Data Points</mat-card-title>
+              <mat-card-content>
+                <div class="aggregate-value">{{ agg.data_points }}</div>
+                <div class="aggregate-sub">{{ agg.start_time | date:'short' }} - {{ agg.end_time | date:'short' }}</div>
+              </mat-card-content>
+            </mat-card>
+          </div>
+
+          <div *ngIf="!historyLoading() && historyRecords().length > 0" class="history-charts">
+            <mat-card>
+              <mat-card-header>
+                <mat-card-title>CPU & Memory</mat-card-title>
+              </mat-card-header>
+              <mat-card-content>
+                <div class="chart-wrapper" *ngIf="historyUsageChartConfig().data">
+                  <canvas baseChart
+                          [type]="historyUsageChartConfig().type"
+                          [data]="historyUsageChartConfig().data"
+                          [options]="historyUsageChartConfig().options">
+                  </canvas>
+                </div>
+              </mat-card-content>
+            </mat-card>
+
+            <mat-card>
+              <mat-card-header>
+                <mat-card-title>Disk & Network</mat-card-title>
+              </mat-card-header>
+              <mat-card-content>
+                <div class="chart-wrapper" *ngIf="historyIOChartConfig().data">
+                  <canvas baseChart
+                          [type]="historyIOChartConfig().type"
+                          [data]="historyIOChartConfig().data"
+                          [options]="historyIOChartConfig().options">
+                  </canvas>
+                </div>
+              </mat-card-content>
+            </mat-card>
+          </div>
+
+          <div *ngIf="!historyLoading() && historyRecords().length === 0" class="empty-state">
+            <mat-icon>insights</mat-icon>
+            <p>No historical metrics yet. Choose a timeframe and load history.</p>
+          </div>
+        </div>
+      </mat-tab>
+    </mat-tab-group>
+  </div>
+</div>

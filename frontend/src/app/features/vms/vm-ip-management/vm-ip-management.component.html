@@ -1,0 +1,172 @@
+<div class="ip-management-card">
+  <mat-card-header>
+    <mat-card-title>
+      <mat-icon>language</mat-icon>
+      IP Addresses
+    </mat-card-title>
+    <button mat-icon-button color="primary" (click)="openAssignDialog()" [matTooltip]="'Assign IP'">
+      <mat-icon>add</mat-icon>
+    </button>
+  </mat-card-header>
+  <mat-card-content>
+    <div *ngIf="loading()" class="loading">
+      <mat-spinner diameter="40"></mat-spinner>
+    </div>
+
+    <div *ngIf="!loading()">
+      <!-- Network Configuration Summary -->
+      <div *ngIf="vmNetworkConfig()" class="network-config-summary">
+        <h4>Network Configuration</h4>
+        <div class="config-grid">
+          <div class="config-item" *ngIf="vmNetworkConfig()?.ip_address">
+            <span class="label">Primary IP:</span>
+            <span class="value">{{ vmNetworkConfig()?.ip_address }}</span>
+          </div>
+          <div class="config-item" *ngIf="vmNetworkConfig()?.gateway">
+            <span class="label">Gateway:</span>
+            <span class="value">{{ vmNetworkConfig()?.gateway }}</span>
+          </div>
+          <div class="config-item" *ngIf="vmNetworkConfig()?.dns_servers">
+            <span class="label">DNS:</span>
+            <span class="value">{{ vmNetworkConfig()?.dns_servers }}</span>
+          </div>
+          <div class="config-item" *ngIf="vmNetworkConfig()?.hostname">
+            <span class="label">Hostname:</span>
+            <span class="value">{{ vmNetworkConfig()?.hostname }}</span>
+          </div>
+          <div class="config-item" *ngIf="vmNetworkConfig()?.mac_address">
+            <span class="label">MAC:</span>
+            <span class="value">{{ vmNetworkConfig()?.mac_address }}</span>
+          </div>
+          <div class="config-item">
+            <span class="label">DHCP:</span>
+            <span class="value">{{ vmNetworkConfig()?.enable_dhcp ? 'Enabled' : 'Disabled' }}</span>
+          </div>
+        </div>
+      </div>
+
+      <mat-divider *ngIf="vmNetworkConfig() && allocatedIPs().length > 0" class="divider"></mat-divider>
+
+      <!-- Allocated IPs List -->
+      <div *ngIf="allocatedIPs().length > 0" class="allocated-ips">
+        <h4>Allocated IPs</h4>
+        <table mat-table [dataSource]="allocatedIPs()" class="ip-table">
+          <!-- IP Address Column -->
+          <ng-container matColumnDef="ip_address">
+            <th mat-header-cell *matHeaderCellDef>IP Address</th>
+            <td mat-cell *matCellDef="let ip">{{ ip.ip_address }}</td>
+          </ng-container>
+
+          <!-- Pool Column -->
+          <ng-container matColumnDef="pool">
+            <th mat-header-cell *matHeaderCellDef>Pool</th>
+            <td mat-cell *matCellDef="let ip">{{ getPoolName(ip.pool_id) }}</td>
+          </ng-container>
+
+          <!-- Hostname Column -->
+          <ng-container matColumnDef="hostname">
+            <th mat-header-cell *matHeaderCellDef>Hostname</th>
+            <td mat-cell *matCellDef="let ip">{{ ip.hostname || '-' }}</td>
+          </ng-container>
+
+          <!-- MAC Column -->
+          <ng-container matColumnDef="mac">
+            <th mat-header-cell *matHeaderCellDef>MAC Address</th>
+            <td mat-cell *matCellDef="let ip">{{ ip.mac_address || '-' }}</td>
+          </ng-container>
+
+          <!-- Allocated At Column -->
+          <ng-container matColumnDef="allocated_at">
+            <th mat-header-cell *matHeaderCellDef>Allocated</th>
+            <td mat-cell *matCellDef="let ip">{{ ip.allocated_at ? (ip.allocated_at | date:'short') : '-' }}</td>
+          </ng-container>
+
+          <!-- Actions Column -->
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef>Actions</th>
+            <td mat-cell *matCellDef="let ip">
+              <button mat-icon-button color="warn" (click)="deallocateIP(ip)" [matTooltip]="'Deallocate'">
+                <mat-icon>link_off</mat-icon>
+              </button>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="['ip_address', 'pool', 'hostname', 'mac', 'allocated_at', 'actions']"></tr>
+          <tr mat-row *matRowDef="let row; columns: ['ip_address', 'pool', 'hostname', 'mac', 'allocated_at', 'actions'];"></tr>
+        </table>
+      </div>
+
+      <!-- Empty State -->
+      <div *ngIf="allocatedIPs().length === 0 && !vmNetworkConfig()" class="empty-state">
+        <mat-icon>cloud_off</mat-icon>
+        <p>No IP addresses assigned to this VM</p>
+        <button mat-raised-button color="primary" (click)="openAssignDialog()">
+          <mat-icon>add</mat-icon>
+          Assign First IP
+        </button>
+      </div>
+    </div>
+  </mat-card-content>
+</div>
+
+<!-- Assign IP Dialog -->
+<div class="dialog-overlay" *ngIf="showAssignDialog()" (click)="closeAssignDialog()">
+  <div class="dialog-container" (click)="$event.stopPropagation()">
+    <h2 mat-dialog-title>Assign IP to VM</h2>
+    <form [formGroup]="assignForm" (ngSubmit)="assignIP()">
+      <mat-dialog-content>
+        <p><strong>VM:</strong> {{ vmName || ('VM-' + vmid) }} (ID {{ vmid }})</p>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Select IP Pool</mat-label>
+          <mat-select [value]="selectedPoolId()" (selectionChange)="onPoolChange($event.value)">
+            <mat-option *ngFor="let pool of pools()" [value]="pool.id">
+              {{ pool.name }} ({{ pool.gateway }} / {{ pool.netmask }}) - {{ pool.available_ips }} available
+            </mat-option>
+          </mat-select>
+          <mat-error *ngIf="assignForm.get('pool_id')?.hasError('required')">
+            Pool is required
+          </mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Select IP Address</mat-label>
+          <mat-select formControlName="ip_address">
+            <mat-option *ngFor="let ip of poolIPs()" [value]="ip.ip_address">
+              {{ ip.ip_address }}
+            </mat-option>
+          </mat-select>
+          <mat-error *ngIf="assignForm.get('ip_address')?.hasError('required')">
+            IP address is required
+          </mat-error>
+          <mat-hint *ngIf="poolIPs().length === 0">No available IPs in this pool</mat-hint>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Hostname (optional)</mat-label>
+          <input matInput formControlName="hostname" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>MAC Address (optional)</mat-label>
+          <input matInput formControlName="mac_address" placeholder="AA:BB:CC:DD:EE:FF" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Notes (optional)</mat-label>
+          <textarea matInput formControlName="notes" rows="2"></textarea>
+        </mat-form-field>
+
+        <mat-checkbox formControlName="alsoSetVmNetworkConfig">Also set VM network config</mat-checkbox>
+        <p class="helper-text">Gateway and DNS will be derived from selected pool.</p>
+      </mat-dialog-content>
+
+      <mat-dialog-actions align="end">
+        <button mat-button type="button" (click)="closeAssignDialog()">Cancel</button>
+        <button mat-raised-button color="primary" type="submit" [disabled]="assignForm.invalid || poolIPs().length === 0">
+          Assign IP
+        </button>
+      </mat-dialog-actions>
+    </form>
+  </div>
+</div>

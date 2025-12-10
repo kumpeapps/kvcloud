@@ -1,0 +1,145 @@
+<div class="cluster-detail-container">
+  <app-loading-spinner *ngIf="loading()" message="Loading cluster details..."></app-loading-spinner>
+
+  <div *ngIf="!loading()" class="cluster-detail-content">
+    <!-- Header -->
+    <div class="page-header">
+      <div class="header-left">
+        <button mat-icon-button (click)="goBack()">
+          <mat-icon>arrow_back</mat-icon>
+        </button>
+        <div>
+          <h1>{{ cluster()?.name }}</h1>
+          <p class="subtitle">{{ cluster()?.description || 'No description' }}</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button mat-raised-button color="primary" (click)="openEditDialog()">
+          <mat-icon>edit</mat-icon>
+          Edit Cluster
+        </button>
+        <button mat-raised-button color="warn" (click)="deleteCluster()">
+          <mat-icon>delete</mat-icon>
+          Delete
+        </button>
+      </div>
+    </div>
+
+    <!-- Error Message -->
+    <mat-card *ngIf="error()" class="error-card">
+      <mat-card-content>
+        <mat-icon color="warn">error</mat-icon>
+        {{ error() }}
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Cluster Info -->
+    <mat-card class="info-card">
+      <mat-card-header>
+        <mat-card-title>Cluster Information</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">Status:</span>
+            <app-status-badge 
+              [status]="cluster()?.is_active ? 'success' : 'default'"
+              [label]="cluster()?.is_active ? 'Active' : 'Inactive'">
+            </app-status-badge>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Total Nodes:</span>
+            <span class="info-value">{{ nodes().length }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Active Nodes:</span>
+            <span class="info-value">{{ activeNodesCount() }}</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Nodes Section -->
+    <mat-card class="nodes-card">
+      <mat-card-header>
+        <mat-card-title>Proxmox Nodes</mat-card-title>
+        <button mat-raised-button color="primary" (click)="openAddNodeDialog()" class="add-button">
+          <mat-icon>add</mat-icon>
+          Add Node
+        </button>
+      </mat-card-header>
+      <mat-card-content>
+        <div *ngIf="nodes().length === 0" class="empty-state">
+          <mat-icon>dns</mat-icon>
+          <p>No nodes configured for this cluster</p>
+          <button mat-raised-button color="primary" (click)="openAddNodeDialog()">
+            <mat-icon>add</mat-icon>
+            Add Node
+          </button>
+        </div>
+
+        <table mat-table [dataSource]="nodesDataSource" *ngIf="nodes().length > 0" class="nodes-table">
+          <!-- Name Column -->
+          <ng-container matColumnDef="name">
+            <th mat-header-cell *matHeaderCellDef>Node Name</th>
+            <td mat-cell *matCellDef="let node">
+              <div class="node-name">
+                <mat-icon>dns</mat-icon>
+                {{ node.name }}
+              </div>
+            </td>
+          </ng-container>
+
+          <!-- Host Column -->
+          <ng-container matColumnDef="host">
+            <th mat-header-cell *matHeaderCellDef>Host</th>
+            <td mat-cell *matCellDef="let node">{{ node.host }}:{{ node.port }}</td>
+          </ng-container>
+
+          <!-- Username Column -->
+          <ng-container matColumnDef="username">
+            <th mat-header-cell *matHeaderCellDef>Username</th>
+            <td mat-cell *matCellDef="let node">{{ node.username }}</td>
+          </ng-container>
+
+          <!-- SSL Column -->
+          <ng-container matColumnDef="ssl">
+            <th mat-header-cell *matHeaderCellDef>SSL Verify</th>
+            <td mat-cell *matCellDef="let node">
+              <mat-icon [color]="node.verify_ssl ? 'primary' : 'warn'">
+                {{ node.verify_ssl ? 'check_circle' : 'cancel' }}
+              </mat-icon>
+            </td>
+          </ng-container>
+
+          <!-- Status Column -->
+          <ng-container matColumnDef="status">
+            <th mat-header-cell *matHeaderCellDef>Status</th>
+            <td mat-cell *matCellDef="let node">
+              <app-status-badge 
+                [status]="node.is_active ? 'success' : 'default'"
+                [label]="node.is_active ? 'Active' : 'Inactive'">
+              </app-status-badge>
+            </td>
+          </ng-container>
+
+          <!-- Actions Column -->
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef>Actions</th>
+            <td mat-cell *matCellDef="let node">
+              <button mat-icon-button color="primary" (click)="openEditNodeDialog(node)" matTooltip="Edit SSH credentials">
+                <mat-icon>edit</mat-icon>
+              </button>
+              <button mat-icon-button color="warn" (click)="deleteNode(node)" matTooltip="Delete node">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: displayedColumns;" [attr.data-node-id]="row.id"></tr>
+        </table>
+      </mat-card-content>
+    </mat-card>
+  </div>
+</div>

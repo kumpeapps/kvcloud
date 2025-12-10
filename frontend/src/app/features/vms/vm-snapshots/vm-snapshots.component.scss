@@ -1,0 +1,170 @@
+.snapshots-container {
+  padding: 16px 0;
+}
+
+.snapshots-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+
+  h2 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 500;
+  }
+
+  button mat-icon {
+    margin-right: 4px;
+  }
+}
+
+.create-form {
+  margin-bottom: 24px;
+  background-color: #f5f5f5;
+
+  .form-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+
+    .full-width {
+      width: 100%;
+    }
+  }
+
+  .form-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 16px;
+
+    button mat-icon {
+      margin-right: 4px;
+    }
+  }
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+  gap: 16px;
+
+  p {
+    margin: 0;
+    color: #666;
+  }
+}
+
+.error-card {
+  background-color: #ffebee;
+  margin-bottom: 16px;
+
+  mat-card-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+
+    mat-icon {
+      font-size: 24px;
+      width: 24px;
+      height: 24px;
+    }
+  }
+}
+
+.empty-state {
+  text-align: center;
+  padding: 48px 24px;
+
+  mat-card-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+
+    mat-icon {
+      font-size: 64px;
+      width: 64px;
+      height: 64px;
+      color: #999;
+    }
+
+    h3 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 500;
+    }
+
+    p {
+      margin: 0;
+      color: #666;
+    }
+  }
+}
+
+.table-container {
+  overflow-x: auto;
+  padding: 0;
+}
+
+.snapshots-table {
+  width: 100%;
+
+  th {
+    font-weight: 600;
+    font-size: 14px;
+  }
+
+  td {
+    padding: 12px 8px;
+  }
+
+  .action-buttons {
+    display: flex;
+    gap: 4px;
+  }
+}
+
+// Dark theme support
+:host-context(.dark-theme) {
+  .create-form {
+    background-color: #2a2a2a;
+  }
+
+  .error-card {
+    background-color: #5c2626;
+  }
+
+  .loading-container p,
+  .empty-state p {
+    color: #aaa;
+  }
+}
+
+// Responsive design
+@media (max-width: 768px) {
+  .snapshots-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+
+    button {
+      width: 100%;
+    }
+  }
+
+  .snapshots-table {
+    font-size: 12px;
+
+    td, th {
+      padding: 8px 4px;
+    }
+  }
+
+  .action-buttons {
+    flex-direction: column;
+  }
+}

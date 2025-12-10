@@ -1,0 +1,381 @@
+<div class="vm-create-page">
+  <div class="page-header">
+    <h1>Create New Virtual Machine</h1>
+    <button mat-button (click)="cancel()">
+      <mat-icon>close</mat-icon>
+      Cancel
+    </button>
+  </div>
+
+  @if (error()) {
+    <mat-card class="error-card">
+      <mat-card-content>
+        <mat-icon color="warn">error</mat-icon>
+        <span>{{ error() }}</span>
+      </mat-card-content>
+    </mat-card>
+  }
+
+  <mat-card>
+    <mat-card-content>
+      <mat-stepper linear #stepper>
+        <!-- Step 1: Basic Configuration -->
+        <mat-step [stepControl]="basicForm" label="Basic Configuration">
+          <form [formGroup]="basicForm">
+            <div class="form-grid">
+              <mat-form-field appearance="outline">
+                <mat-label>Node</mat-label>
+                <mat-select formControlName="nodeId" required>
+                  @for (node of nodes(); track node.id) {
+                    <mat-option [value]="node.id">
+                      {{ node.name }} ({{ node.host }})
+                    </mat-option>
+                  }
+                </mat-select>
+                <mat-error>Please select a node</mat-error>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>VM ID</mat-label>
+                <input matInput type="number" formControlName="vmid" required 
+                       placeholder="e.g., 100">
+                <mat-hint>Must be unique (100-999999999)</mat-hint>
+                <mat-error>Please enter a valid VM ID</mat-error>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>VM Name</mat-label>
+                <input matInput formControlName="name" required 
+                       placeholder="e.g., web-server-01">
+                <mat-error>Please enter a VM name</mat-error>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>OS Type</mat-label>
+                <mat-select formControlName="osType" required>
+                  <mat-option value="l26">Linux 6.x - 2.6 Kernel</mat-option>
+                  <mat-option value="l24">Linux 2.4 Kernel</mat-option>
+                  <mat-option value="win11">Windows 11</mat-option>
+                  <mat-option value="win10">Windows 10</mat-option>
+                  <mat-option value="win8">Windows 8</mat-option>
+                  <mat-option value="win7">Windows 7</mat-option>
+                  <mat-option value="solaris">Solaris</mat-option>
+                  <mat-option value="other">Other</mat-option>
+                </mat-select>
+              </mat-form-field>
+
+              <div class="full-width">
+                <h3>Installation Source</h3>
+                <mat-checkbox formControlName="useTemplate">
+                  Clone from Template
+                </mat-checkbox>
+
+                @if (basicForm.value.useTemplate) {
+                  <mat-form-field appearance="outline" class="full-width">
+                    <mat-label>Template</mat-label>
+                    <mat-select formControlName="templateId">
+                      @for (template of templates(); track template.vmid) {
+                        <mat-option [value]="template.vmid">
+                          {{ template.name }} (ID: {{ template.vmid }})
+                        </mat-option>
+                      }
+                    </mat-select>
+                    <mat-error>Please select a template</mat-error>
+                  </mat-form-field>
+                }
+
+                <mat-checkbox formControlName="useIso">
+                  Install from ISO
+                </mat-checkbox>
+
+                @if (basicForm.value.useIso) {
+                  <mat-form-field appearance="outline" class="full-width">
+                    <mat-label>ISO Image</mat-label>
+                    <mat-select formControlName="iso">
+                      @for (iso of isos(); track iso) {
+                        <mat-option [value]="iso">
+                          {{ iso }}
+                        </mat-option>
+                      }
+                    </mat-select>
+                    <mat-error>Please select an ISO</mat-error>
+                  </mat-form-field>
+                }
+              </div>
+            </div>
+
+            <div class="step-actions">
+              <button mat-raised-button color="primary" matStepperNext 
+                      [disabled]="!basicForm.valid">
+                Next
+              </button>
+            </div>
+          </form>
+        </mat-step>
+
+        <!-- Step 2: Resource Allocation -->
+        <mat-step [stepControl]="resourceForm" label="Resources">
+          <form [formGroup]="resourceForm">
+            <div class="form-grid">
+              <mat-form-field appearance="outline">
+                <mat-label>CPU Cores</mat-label>
+                <input matInput type="number" formControlName="cores" required min="1">
+                <mat-hint>Number of cores per socket</mat-hint>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>CPU Sockets</mat-label>
+                <input matInput type="number" formControlName="sockets" required min="1">
+                <mat-hint>Number of CPU sockets</mat-hint>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Memory</mat-label>
+                <input matInput type="number" formControlName="memory" required min="512">
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Memory Unit</mat-label>
+                <mat-select formControlName="memoryUnit">
+                  <mat-option value="MB">MB</mat-option>
+                  <mat-option value="GB">GB</mat-option>
+                </mat-select>
+              </mat-form-field>
+
+              <div class="full-width resource-summary">
+                <h3>Resource Summary</h3>
+                <p>
+                  <strong>Total CPU Cores:</strong> 
+                  {{ resourceForm.value.cores * resourceForm.value.sockets }}
+                </p>
+                <p>
+                  <strong>Total Memory:</strong>
+                  @if (resourceForm.value.memoryUnit === 'GB') {
+                    {{ resourceForm.value.memory * 1024 }} MB 
+                    ({{ resourceForm.value.memory }} GB)
+                  } @else {
+                    {{ resourceForm.value.memory }} MB
+                  }
+                </p>
+              </div>
+            </div>
+
+            <div class="step-actions">
+              <button mat-button matStepperPrevious>Back</button>
+              <button mat-raised-button color="primary" matStepperNext 
+                      [disabled]="!resourceForm.valid">
+                Next
+              </button>
+            </div>
+          </form>
+        </mat-step>
+
+        <!-- Step 3: Storage Configuration -->
+        <mat-step [stepControl]="storageForm" label="Storage">
+          <form [formGroup]="storageForm">
+            <div class="form-grid">
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Storage</mat-label>
+                <mat-select formControlName="storage" required>
+                  @for (storage of storages(); track storage.storage) {
+                    <mat-option [value]="storage.storage">
+                      {{ storage.storage }} ({{ storage.type }})
+                      @if (storage.avail) {
+                        - {{ (storage.avail / 1073741824).toFixed(2) }} GB available
+                      }
+                    </mat-option>
+                  }
+                </mat-select>
+                <mat-error>Please select storage</mat-error>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Disk Size</mat-label>
+                <input matInput type="number" formControlName="diskSize" required min="1">
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Disk Unit</mat-label>
+                <mat-select formControlName="diskUnit">
+                  <mat-option value="GB">GB</mat-option>
+                  <mat-option value="TB">TB</mat-option>
+                </mat-select>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Disk Type</mat-label>
+                <mat-select formControlName="diskType">
+                  <mat-option value="scsi">SCSI</mat-option>
+                  <mat-option value="virtio">VirtIO Block</mat-option>
+                  <mat-option value="sata">SATA</mat-option>
+                  <mat-option value="ide">IDE</mat-option>
+                </mat-select>
+              </mat-form-field>
+            </div>
+
+            <div class="step-actions">
+              <button mat-button matStepperPrevious>Back</button>
+              <button mat-raised-button color="primary" matStepperNext 
+                      [disabled]="!storageForm.valid">
+                Next
+              </button>
+            </div>
+          </form>
+        </mat-step>
+
+        <!-- Step 4: Network Configuration -->
+        <mat-step [stepControl]="networkForm" label="Network">
+          <form [formGroup]="networkForm">
+            <div class="form-grid">
+              <mat-form-field appearance="outline">
+                <mat-label>Network Bridge</mat-label>
+                <input matInput formControlName="networkBridge" required 
+                       placeholder="e.g., vmbr0">
+                <mat-hint>Network bridge to use</mat-hint>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Network Model</mat-label>
+                <mat-select formControlName="networkModel" required>
+                  <mat-option value="virtio">VirtIO (recommended)</mat-option>
+                  <mat-option value="e1000">Intel E1000</mat-option>
+                  <mat-option value="rtl8139">Realtek RTL8139</mat-option>
+                  <mat-option value="vmxnet3">VMware vmxnet3</mat-option>
+                </mat-select>
+              </mat-form-field>
+
+              <div class="full-width">
+                <mat-checkbox formControlName="enableFirewall">
+                  Enable Firewall
+                </mat-checkbox>
+              </div>
+            </div>
+
+            <div class="step-actions">
+              <button mat-button matStepperPrevious>Back</button>
+              <button mat-raised-button color="primary" matStepperNext 
+                      [disabled]="!networkForm.valid">
+                Next
+              </button>
+            </div>
+          </form>
+        </mat-step>
+
+        <!-- Step 5: Provisioning & IP Assignment -->
+        <mat-step [stepControl]="cloudInitForm" label="Provisioning & Network">
+          <form [formGroup]="cloudInitForm">
+            <div class="form-grid">
+              <div class="full-width">
+                <h3>Provisioning Settings</h3>
+                <mat-hint>Configure guest user, SSH keys, packages, compose, timezone/locale.</mat-hint>
+              </div>
+
+              <h4>Provisioning Overrides (optional)</h4>
+                <div class="form-grid">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Default User</mat-label>
+                    <input matInput formControlName="default_user" placeholder="e.g., ubuntu">
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline">
+                    <mat-label>Password</mat-label>
+                    <input matInput type="password" formControlName="default_password" placeholder="plaintext allowed; will be hashed">
+                  </mat-form-field>
+
+                  <div class="full-width">
+                    <mat-checkbox formControlName="ssh_pwauth">Enable SSH Password Auth</mat-checkbox>
+                  </div>
+
+                  <mat-form-field appearance="outline" class="full-width">
+                    <mat-label>SSH Authorized Keys</mat-label>
+                    <textarea matInput rows="4" formControlName="ssh_authorized_keys" placeholder="One per line or comma-separated"></textarea>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline" class="full-width">
+                    <mat-label>Packages to Install</mat-label>
+                    <textarea matInput rows="3" formControlName="packages" placeholder="e.g., curl, htop, docker"></textarea>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline" class="full-width">
+                    <mat-label>Docker Compose YAML</mat-label>
+                    <textarea matInput rows="6" formControlName="docker_compose_content" placeholder="Paste docker-compose.yml content"></textarea>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline">
+                    <mat-label>Compose Path</mat-label>
+                    <input matInput formControlName="docker_compose_path">
+                    <mat-hint>Default: /root/docker-compose.yml</mat-hint>
+                  </mat-form-field>
+
+                  <div>
+                    <mat-checkbox formControlName="start_docker_compose">Start Compose on Boot</mat-checkbox>
+                  </div>
+
+                  <mat-form-field appearance="outline">
+                    <mat-label>Timezone</mat-label>
+                    <input matInput formControlName="timezone" placeholder="e.g., UTC or America/Chicago">
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline">
+                    <mat-label>Locale</mat-label>
+                    <input matInput formControlName="locale" placeholder="e.g., en_US.UTF-8">
+                  </mat-form-field>
+                </div>
+              
+              <div class="full-width">
+                <h3>IP Address Assignment</h3>
+                <mat-checkbox formControlName="autoAssignIP">
+                  Auto-assign IP from pool
+                </mat-checkbox>
+                <mat-hint>Automatically allocate an IP address from a pool</mat-hint>
+              </div>
+              <div class="full-width">
+                <h3>Guest Agent</h3>
+                <mat-checkbox formControlName="enableGuestAgent">
+                  Enable QEMU Guest Agent device (VM config)
+                </mat-checkbox>
+                <mat-checkbox formControlName="provisionViaGuestAgent">
+                  Provision via Guest Agent (no cloud-init)
+                </mat-checkbox>
+                <mat-hint>
+                  Requires qemu-guest-agent installed and running in the guest. We will wait for agent readiness and apply user, SSH keys, packages, hostname/timezone, and netplan.
+                </mat-hint>
+              </div>
+
+              @if (cloudInitForm.value.autoAssignIP) {
+                <mat-form-field appearance="outline" class="full-width">
+                  <mat-label>IP Pool</mat-label>
+                  <mat-select formControlName="ipPoolId">
+                    @for (pool of ipPools(); track pool.id) {
+                      <mat-option [value]="pool.id">
+                        {{ pool.name }} - {{ pool.cidr }}
+                        ({{ pool.available_ips || 0 }} available)
+                      </mat-option>
+                    }
+                  </mat-select>
+                  <mat-hint>Pool to allocate IP from</mat-hint>
+                  <mat-error>Please select an IP pool</mat-error>
+                </mat-form-field>
+              }
+            </div>
+
+            <div class="step-actions">
+              <button mat-button matStepperPrevious>Back</button>
+              <button mat-raised-button color="accent" 
+                      (click)="createVM()"
+                      [disabled]="!isValid() || loading()">
+                @if (loading()) {
+                  <mat-spinner diameter="20"></mat-spinner>
+                  Creating...
+                } @else {
+                  <mat-icon>add</mat-icon>
+                  Create VM
+                }
+              </button>
+            </div>
+          </form>
+        </mat-step>
+      </mat-stepper>
+    </mat-card-content>
+  </mat-card>
+</div>

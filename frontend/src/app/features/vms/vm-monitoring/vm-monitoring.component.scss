@@ -1,0 +1,153 @@
+.monitoring-container {
+  padding: 16px 0;
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+
+    h2 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 500;
+    }
+  }
+}
+
+.error-card {
+  background-color: #ffebee;
+  margin-bottom: 16px;
+
+  mat-card-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+
+    mat-icon {
+      font-size: 24px;
+      width: 24px;
+      height: 24px;
+    }
+  }
+}
+
+.stats-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+
+  mat-card {
+    mat-card-content {
+      padding: 16px;
+
+      .stat-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+
+        mat-icon {
+          font-size: 36px;
+          width: 36px;
+          height: 36px;
+          color: #3f51b5;
+        }
+
+        .stat-label {
+          font-size: 12px;
+          color: rgba(0, 0, 0, 0.6);
+          text-transform: uppercase;
+          font-weight: 500;
+        }
+
+        .stat-value {
+          font-size: 24px;
+          font-weight: 500;
+          color: #3f51b5;
+          line-height: 1.2;
+        }
+
+        .stat-detail {
+          font-size: 11px;
+          color: rgba(0, 0, 0, 0.5);
+        }
+      }
+    }
+  }
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+  gap: 24px;
+  margin-bottom: 16px;
+
+  mat-card {
+    mat-card-header {
+      margin-bottom: 16px;
+
+      mat-icon[mat-card-avatar] {
+        font-size: 32px;
+        width: 32px;
+        height: 32px;
+      }
+    }
+
+    mat-card-content {
+      padding: 0;
+    }
+  }
+}
+
+.chart-container {
+  position: relative;
+  height: 300px;
+  padding: 16px;
+}
+
+.chart-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background-color: #e3f2fd;
+  border-radius: 4px;
+  font-size: 14px;
+  color: #1976d2;
+
+  mat-icon {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+  }
+}
+
+// Dark theme support
+:host-context(.dark-theme) {
+  .error-card {
+    background-color: #5c2626;
+  }
+
+  .chart-info {
+    background-color: #1a237e;
+    color: #90caf9;
+  }
+}
+
+// Responsive design
+@media (max-width: 1024px) {
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .chart-container {
+    height: 250px;
+  }
+
+  .charts-grid {
+    gap: 16px;
+  }
+}

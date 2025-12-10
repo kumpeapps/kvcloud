@@ -1,0 +1,104 @@
+mat-dialog-content {
+  min-width: 750px;
+  max-height: 70vh;
+  padding: 20px 24px;
+  overflow-y: auto;
+}
+
+.full-width {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.half-width {
+  width: calc(50% - 8px);
+}
+
+.form-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.form-error {
+  display: block;
+  margin-top: 8px;
+  color: var(--warn-color);
+}
+
+.nodes-section {
+  margin-top: 24px;
+
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+
+    h3 {
+      margin: 0;
+      color: var(--text-primary);
+    }
+  }
+
+  .no-nodes {
+    text-align: center;
+    padding: 32px;
+    color: var(--text-secondary);
+
+    mat-icon {
+      font-size: 48px;
+      width: 48px;
+      height: 48px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    p {
+      margin: 0;
+    }
+  }
+
+  .node-item {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    padding: 8px 16px !important;
+    background: var(--card-background);
+
+    &:hover {
+      background: var(--hover-background);
+    }
+  }
+
+  .node-form-card {
+    margin-top: 16px;
+    background: var(--card-background);
+
+    mat-checkbox {
+      margin-top: 8px;
+    }
+
+    .section-divider {
+      font-size: 12px;
+      font-weight: 600;
+      color: #1976d2;
+      margin: 20px 0 12px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+  }
+}
+
+mat-dialog-actions {
+  padding: 16px 24px;
+
+  button {
+    margin-left: 8px;
+
+    mat-spinner {
+      display: inline-block;
+      margin-right: 8px;
+    }
+  }
+}

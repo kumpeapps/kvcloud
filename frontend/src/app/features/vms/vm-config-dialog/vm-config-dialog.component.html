@@ -1,0 +1,51 @@
+<h2 mat-dialog-title>Edit VM Configuration</h2>
+
+<mat-dialog-content>
+  <form [formGroup]="configForm">
+    <div class="form-fields">
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>VM Name</mat-label>
+        <input matInput formControlName="name" required>
+        <mat-error>Please enter a valid VM name</mat-error>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Description</mat-label>
+        <textarea matInput formControlName="description" rows="3"></textarea>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>CPU Cores</mat-label>
+        <input matInput type="number" formControlName="cores" required min="1" max="128">
+        <mat-hint>Number of CPU cores (1-128)</mat-hint>
+        <mat-error>Please enter a valid number of cores</mat-error>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Memory (MB)</mat-label>
+        <input matInput type="number" formControlName="memory" required min="512">
+        <mat-hint>Memory in megabytes (minimum 512)</mat-hint>
+        <mat-error>Please enter a valid memory amount</mat-error>
+      </mat-form-field>
+    </div>
+
+    <div class="warning-message">
+      <mat-icon color="warn">warning</mat-icon>
+      <span>Note: Configuration changes may require VM restart to take effect.</span>
+    </div>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancel()" [disabled]="loading">Cancel</button>
+  <button mat-raised-button color="primary" (click)="save()" 
+          [disabled]="!configForm.valid || loading">
+    @if (loading) {
+      <mat-spinner diameter="20"></mat-spinner>
+      Saving...
+    } @else {
+      <mat-icon>save</mat-icon>
+      Save Changes
+    }
+  </button>
+</mat-dialog-actions>

@@ -1,0 +1,194 @@
+<div class="snapshots-container">
+  <div class="header">
+    <h1>VM Snapshots</h1>
+    <button 
+      mat-raised-button 
+      color="primary"
+      *ngIf="canCreateSnapshot() && selectedVM()"
+      (click)="openCreateDialog()">
+      <mat-icon>add_photo_alternate</mat-icon>
+      Create Snapshot
+    </button>
+  </div>
+
+  <app-loading-spinner *ngIf="loading()"></app-loading-spinner>
+
+  <div *ngIf="!loading()" class="content">
+    <!-- Node and VM Selection -->
+    <mat-card class="selection-card">
+      <mat-card-content>
+        <div class="selection-row">
+          <mat-form-field appearance="outline" class="node-select">
+            <mat-label>Select Node</mat-label>
+            <mat-select 
+              [value]="selectedNode()"
+              (selectionChange)="selectNode($event.value)">
+              <mat-option *ngFor="let node of nodes()" [value]="node">
+                {{node.name}}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="vm-select" *ngIf="selectedNode()">
+            <mat-label>Select VM</mat-label>
+            <mat-select 
+              [value]="selectedVM()"
+              (selectionChange)="selectVM($event.value)">
+              <mat-option *ngFor="let vm of vms()" [value]="vm">
+                {{vm.name}} (ID: {{vm.vmid}})
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Snapshots List -->
+    <mat-card *ngIf="selectedVM()" class="snapshots-card">
+      <mat-card-header>
+        <mat-card-title>Snapshots for {{selectedVM()?.name}}</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <app-loading-spinner *ngIf="snapshotsLoading()"></app-loading-spinner>
+
+        <div *ngIf="!snapshotsLoading()">
+          <app-empty-state
+            *ngIf="snapshots().length === 0"
+            icon="photo_library"
+            title="No Snapshots"
+            message="This VM doesn't have any snapshots yet. Create one to save the current state."
+            [actionButton]="canCreateSnapshot() ? 'Create Snapshot' : undefined"
+            (action)="openCreateDialog()">
+          </app-empty-state>
+
+          <table mat-table [dataSource]="snapshots()" *ngIf="snapshots().length > 0" class="snapshots-table">
+            <!-- Name Column -->
+            <ng-container matColumnDef="name">
+              <th mat-header-cell *matHeaderCellDef>Name</th>
+              <td mat-cell *matCellDef="let snapshot">
+                <div class="snapshot-name">
+                  <mat-icon>photo_camera</mat-icon>
+                  <span>{{snapshot.name}}</span>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Description Column -->
+            <ng-container matColumnDef="description">
+              <th mat-header-cell *matHeaderCellDef>Description</th>
+              <td mat-cell *matCellDef="let snapshot">
+                {{snapshot.description || 'No description'}}
+              </td>
+            </ng-container>
+
+            <!-- Date Column -->
+            <ng-container matColumnDef="date">
+              <th mat-header-cell *matHeaderCellDef>Created</th>
+              <td mat-cell *matCellDef="let snapshot">
+                {{formatDate(snapshot.snaptime)}}
+              </td>
+            </ng-container>
+
+            <!-- VM State Column -->
+            <ng-container matColumnDef="vmstate">
+              <th mat-header-cell *matHeaderCellDef>Includes RAM</th>
+              <td mat-cell *matCellDef="let snapshot">
+                <mat-chip-listbox>
+                  <mat-chip [color]="snapshot.vmstate ? 'primary' : 'default'">
+                    {{getVMStateText(snapshot.vmstate)}}
+                  </mat-chip>
+                </mat-chip-listbox>
+              </td>
+            </ng-container>
+
+            <!-- Actions Column -->
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef>Actions</th>
+              <td mat-cell *matCellDef="let snapshot">
+                <button 
+                  mat-icon-button 
+                  [matTooltip]="'Rollback to this snapshot'"
+                  *ngIf="canRestoreSnapshot()"
+                  (click)="rollbackSnapshot(snapshot)">
+                  <mat-icon>restore</mat-icon>
+                </button>
+                <button 
+                  mat-icon-button 
+                  color="warn"
+                  [matTooltip]="'Delete snapshot'"
+                  *ngIf="canDeleteSnapshot()"
+                  (click)="deleteSnapshot(snapshot)">
+                  <mat-icon>delete</mat-icon>
+                </button>
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+          </table>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+</div>
+
+<!-- Create Snapshot Dialog -->
+<div class="dialog-overlay" *ngIf="showCreateDialog()" (click)="closeCreateDialog()">
+  <div class="dialog-container" (click)="$event.stopPropagation()">
+    <div class="dialog-header">
+      <h2>Create Snapshot</h2>
+      <button mat-icon-button (click)="closeCreateDialog()">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+
+    <form [formGroup]="snapshotForm" (ngSubmit)="createSnapshot()">
+      <div class="dialog-content">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Snapshot Name</mat-label>
+          <input matInput formControlName="snapname" placeholder="snapshot-20231219" required>
+          <mat-hint>Only alphanumeric, dash, and underscore allowed</mat-hint>
+          <mat-error *ngIf="snapshotForm.get('snapname')?.hasError('required')">
+            Snapshot name is required
+          </mat-error>
+          <mat-error *ngIf="snapshotForm.get('snapname')?.hasError('pattern')">
+            Invalid characters in name
+          </mat-error>
+          <mat-error *ngIf="snapshotForm.get('snapname')?.hasError('maxlength')">
+            Name must be 40 characters or less
+          </mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Description (Optional)</mat-label>
+          <textarea 
+            matInput 
+            formControlName="description" 
+            rows="3"
+            placeholder="Before system update..."></textarea>
+          <mat-error *ngIf="snapshotForm.get('description')?.hasError('maxlength')">
+            Description must be 255 characters or less
+          </mat-error>
+        </mat-form-field>
+
+        <div class="checkbox-field">
+          <mat-checkbox formControlName="vmstate">
+            Include VM RAM state
+          </mat-checkbox>
+          <mat-hint class="vmstate-hint">
+            <mat-icon>info</mat-icon>
+            Including RAM allows restoring the exact running state but requires the VM to be running and takes longer.
+          </mat-hint>
+        </div>
+      </div>
+
+      <div class="dialog-actions">
+        <button mat-button type="button" (click)="closeCreateDialog()">Cancel</button>
+        <button mat-raised-button color="primary" type="submit" [disabled]="snapshotForm.invalid">
+          <mat-icon>add_photo_alternate</mat-icon>
+          Create
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

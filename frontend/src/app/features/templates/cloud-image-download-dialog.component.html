@@ -1,0 +1,131 @@
+<h2 mat-dialog-title>Download Cloud Image</h2>
+
+<mat-dialog-content>
+  <form [formGroup]="downloadForm">
+    <div class="form-container">
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Cloud Image</mat-label>
+        <mat-select formControlName="imageId" required>
+          @for (image of cloudImages(); track image.id) {
+            <mat-option [value]="image.id">
+              {{ image.name }}
+              @if (image.description) {
+                <span class="image-desc">- {{ image.description }}</span>
+              }
+            </mat-option>
+          }
+        </mat-select>
+        <mat-hint>Select a cloud-init enabled image</mat-hint>
+        <mat-error>Please select an image</mat-error>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Target Node</mat-label>
+        <mat-select formControlName="nodeId" required>
+          @for (node of nodes(); track node.id) {
+            <mat-option [value]="node.id">
+              {{ node.name }} ({{ node.host }})
+            </mat-option>
+          }
+        </mat-select>
+        <mat-error>Please select a node</mat-error>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Template VM ID</mat-label>
+        <input matInput type="number" formControlName="templateVmid" required
+               placeholder="e.g., 9000" [disabled]="vmidValidating()">
+        @if (vmidValidating()) {
+          <mat-icon matSuffix style="color: blue;">hourglass_top</mat-icon>
+        } @else if (!vmidValidating() && vmidAvailable() === true) {
+          <mat-icon matSuffix style="color: green;">check_circle</mat-icon>
+        } @else if (!vmidValidating() && vmidAvailable() === false) {
+          <mat-icon matSuffix style="color: red;">cancel</mat-icon>
+        }
+        <mat-hint>Auto-assigned based on node selection (can be customized)</mat-hint>
+        @if (!vmidValidating() && vmidAvailable() === false) {
+          <mat-error>This VM ID already exists on the selected node</mat-error>
+        } @else {
+          <mat-error>Please enter a valid VM ID</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Template Name</mat-label>
+        <input matInput formControlName="templateName" required
+               placeholder="e.g., debian-12-cloud">
+        <mat-error>Please enter a template name</mat-error>
+      </mat-form-field>
+
+      <div class="resource-row">
+        <mat-form-field appearance="outline">
+          <mat-label>Memory (MB)</mat-label>
+          <input matInput type="number" formControlName="memory" required>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>CPU Cores</mat-label>
+          <input matInput type="number" formControlName="cores" required>
+        </mat-form-field>
+      </div>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Storage</mat-label>
+        <input matInput formControlName="storage" required
+               placeholder="e.g., local-lvm">
+        <mat-hint>Storage where the template disk will be created</mat-hint>
+      </mat-form-field>
+
+      @if (downloading()) {
+        <div class="progress-section">
+          <mat-progress-bar 
+            [mode]="progress() === 0 ? 'indeterminate' : 'determinate'"
+            [value]="progress()">
+          </mat-progress-bar>
+          <div class="status-info">
+            <p class="status-message">
+              <strong>{{ downloadStatus()?.status === 'completed' ? '✓ Complete' : (downloadStatus()?.status === 'failed' ? '✗ Failed' : 'In Progress') }}:</strong>
+              {{ statusMessage() || (downloadStatus()?.message) || 'Initializing...' }}
+            </p>
+            <p class="progress-text">{{ progress() }}% complete</p>
+            @if (downloadStatus()) {
+              <div class="status-details">
+                <p><strong>Image:</strong> {{ downloadStatus().image_name }}</p>
+                <p><strong>Node:</strong> {{ downloadStatus().node_name }}</p>
+                <p><strong>Template VM ID:</strong> {{ downloadStatus().template_vmid }}</p>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      @if (error()) {
+        <mat-error class="error-message">
+          {{ error() }}
+        </mat-error>
+      }
+    </div>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  @if (!downloading() || downloadStatus()?.status === 'failed') {
+    <button mat-button (click)="closeDialog()">Cancel</button>
+    <button mat-raised-button color="primary" 
+            (click)="onDownload()"
+            [disabled]="!downloadForm.valid || loading()">
+      @if (loading()) {
+        <mat-spinner diameter="20"></mat-spinner>
+        Starting...
+      } @else {
+        <mat-icon>cloud_download</mat-icon>
+        Download & Create Template
+      }
+    </button>
+  } @else if (downloadStatus()?.status === 'completed') {
+    <button mat-raised-button color="primary" (click)="dialogRef.close(true)">
+      <mat-icon>check_circle</mat-icon>
+      Close
+    </button>
+  }
+</mat-dialog-actions>

@@ -1,0 +1,131 @@
+<div class="monitoring-container">
+  <div class="header">
+    <h2>Real-time Monitoring</h2>
+    <button mat-raised-button color="primary" (click)="updateCharts()">
+      <mat-icon>refresh</mat-icon>
+      Refresh Now
+    </button>
+  </div>
+
+  @if (error()) {
+    <mat-card class="error-card">
+      <mat-card-content>
+        <mat-icon color="warn">error</mat-icon>
+        <span>{{ error() }}</span>
+      </mat-card-content>
+    </mat-card>
+  }
+
+  <!-- Stats Summary Cards -->
+  @if (currentStats()) {
+    <div class="stats-summary">
+      <mat-card>
+        <mat-card-content>
+          <div class="stat-item">
+            <mat-icon>memory</mat-icon>
+            <div>
+              <div class="stat-label">CPU Usage</div>
+              <div class="stat-value">{{ currentStats().cpu?.toFixed(1) }}%</div>
+              <div class="stat-detail">{{ currentStats().cpu_cores }} cores</div>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card>
+        <mat-card-content>
+          <div class="stat-item">
+            <mat-icon>storage</mat-icon>
+            <div>
+              <div class="stat-label">Memory Usage</div>
+              <div class="stat-value">{{ currentStats().memory_percent?.toFixed(1) }}%</div>
+              <div class="stat-detail">{{ formatBytes(currentStats().memory) }} / {{ formatBytes(currentStats().memory_max) }}</div>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card>
+        <mat-card-content>
+          <div class="stat-item">
+            <mat-icon>sd_storage</mat-icon>
+            <div>
+              <div class="stat-label">Disk Usage</div>
+              <div class="stat-value">{{ currentStats().disk_percent?.toFixed(1) }}%</div>
+              <div class="stat-detail">{{ formatBytes(currentStats().disk) }} / {{ formatBytes(currentStats().disk_max) }}</div>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card>
+        <mat-card-content>
+          <div class="stat-item">
+            <mat-icon>schedule</mat-icon>
+            <div>
+              <div class="stat-label">Uptime</div>
+              <div class="stat-value">{{ formatUptime(currentStats().uptime) }}</div>
+              <div class="stat-detail">{{ currentStats().status }}</div>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    </div>
+  }
+
+  <div class="charts-grid">
+    <!-- CPU Chart -->
+    <mat-card>
+      <mat-card-header>
+        <mat-icon mat-card-avatar color="primary">memory</mat-icon>
+        <mat-card-title>CPU Usage</mat-card-title>
+        <mat-card-subtitle>Real-time processor utilization</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="chart-container">
+          <canvas baseChart
+                  [data]="cpuChartData"
+                  [options]="cpuChartOptions"
+                  [type]="cpuChartType">
+          </canvas>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Memory Chart -->
+    <mat-card>
+      <mat-card-header>
+        <mat-icon mat-card-avatar color="accent">storage</mat-icon>
+        <mat-card-title>Memory Usage</mat-card-title>
+        <mat-card-subtitle>Real-time memory utilization</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="chart-container">
+          <canvas baseChart
+                  [data]="memoryChartData"
+                  [options]="memoryChartOptions"
+                  [type]="memoryChartType">
+          </canvas>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Disk Chart -->
+    <mat-card>
+      <mat-card-header>
+        <mat-icon mat-card-avatar style="background-color: #4caf50;">sd_storage</mat-icon>
+        <mat-card-title>Disk Usage</mat-card-title>
+        <mat-card-subtitle>Real-time disk utilization</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="chart-container">
+          <canvas baseChart
+                  [data]="diskChartData"
+                  [options]="diskChartOptions"
+                  [type]="diskChartType">
+          </canvas>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+</div>

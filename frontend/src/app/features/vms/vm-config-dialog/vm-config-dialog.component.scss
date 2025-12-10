@@ -1,0 +1,62 @@
+mat-dialog-content {
+  min-width: 500px;
+  padding: 24px;
+}
+
+.form-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  .full-width {
+    width: 100%;
+  }
+}
+
+.warning-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  margin-top: 16px;
+  background-color: #fff3e0;
+  border-radius: 4px;
+  font-size: 14px;
+
+  mat-icon {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+  }
+}
+
+mat-dialog-actions {
+  padding: 16px 24px;
+  gap: 8px;
+
+  button {
+    mat-spinner {
+      display: inline-block;
+      margin-right: 8px;
+    }
+
+    mat-icon {
+      margin-right: 4px;
+    }
+  }
+}
+
+// Dark theme support
+:host-context(.dark-theme) {
+  .warning-message {
+    background-color: #5d4037;
+  }
+}
+
+// Responsive design
+@media (max-width: 768px) {
+  mat-dialog-content {
+    min-width: auto;
+    width: 100%;
+  }
+}

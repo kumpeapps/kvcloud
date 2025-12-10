@@ -1,0 +1,297 @@
+import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
+import { environment } from '../../../environments/environment';
+
+export interface VM {
+  vmid: number;
+  name: string;
+  status: 'running' | 'stopped' | 'paused';
+  node: string;
+  cpu?: number;
+  mem?: number;
+  maxmem?: number;
+  disk?: number;
+  maxdisk?: number;
+  uptime?: number;
+  type?: string;
+  cpus?: number;
+  tags?: string;
+  is_locked?: boolean;
+  template_vmid?: number;
+}
+
+export interface VMStatus {
+  vmid: number;
+  name: string;
+  status: string;
+  cpu?: number;
+  mem?: number;
+  maxmem?: number;
+  disk?: number;
+  maxdisk?: number;
+  uptime?: number;
+  node?: string;
+  type?: string;
+  cpus?: number;
+}
+
+export interface VMCreateData {
+  vmid?: number;  // Optional - will be auto-generated if not provided
+  name: string;
+  cores: number;
+  memory: number;
+  disk_size: number;
+  storage: string;
+  network_bridge: string;
+  os_type: string;
+  iso?: string;
+  template_id?: number;
+  clone_from?: number;
+  // Cloud-init profile and IP assignment
+  cloud_init_profile_id?: number;
+  auto_assign_ip?: boolean;
+  ip_pool_id?: number;
+  // Cloud-init overrides
+  default_user?: string;
+  default_password?: string;
+  ssh_authorized_keys?: string[];
+  ssh_pwauth?: boolean;
+  packages?: string[];
+  apt_update?: boolean;
+  apt_upgrade?: boolean;
+  apt_reboot_if_required?: boolean;
+  docker_compose_content?: string;
+  docker_compose_path?: string;
+  start_docker_compose?: boolean;
+  timezone?: string;
+  locale?: string;
+  // Guest agent provisioning
+  enable_guest_agent?: boolean;
+  provision_via_guest_agent?: boolean;
+}
+
+export interface GuestAgentProvisionPayload {
+  node_id: number;
+  vmid: number;
+  default_user?: string;
+  default_password?: string;
+  ssh_authorized_keys?: string[];
+  ssh_pwauth?: boolean;
+  packages?: string[];
+  hostname?: string;
+  timezone?: string;
+  docker_compose_content?: string;
+  docker_compose_path?: string;
+  start_docker_compose?: boolean;
+  write_network?: boolean;
+}
+
+@Injectable({
+  providedIn: 'root'
+})
+export class VMService {
+  private apiUrl = environment.apiUrl;
+
+  constructor(private http: HttpClient) {}
+
+  // VM operations
+  listVMs(nodeId: number): Observable<{ vms: VM[] }> {
+    return this.http.get<{ vms: VM[] }>(`${this.apiUrl}/vms/node/${nodeId}`);
+  }
+
+  getVMStatus(nodeId: number, vmid: number): Observable<VMStatus> {
+    return this.http.get<VMStatus>(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/status`);
+  }
+
+  getVMStats(nodeId: number, vmid: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/stats`);
+  }
+
+  startVM(nodeId: number, vmid: number): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/start`, {});
+  }
+
+  stopVM(nodeId: number, vmid: number): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/stop`, {});
+  }
+
+  restartVM(nodeId: number, vmid: number): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/restart`, {});
+  }
+
+  pauseVM(nodeId: number, vmid: number): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/pause`, {});
+  }
+
+  resumeVM(nodeId: number, vmid: number): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/resume`, {});
+  }
+
+  shutdownVM(nodeId: number, vmid: number): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/shutdown`, {});
+  }
+
+  resetVM(nodeId: number, vmid: number): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/reset`, {});
+  }
+
+  // VM creation
+  createVM(nodeId: number, vmData: VMCreateData): Promise<any> {
+    return this.http.post(`${this.apiUrl}/vms/node/${nodeId}/create`, vmData).toPromise();
+  }
+
+  // Provision via guest agent (optional manual trigger)
+  provisionViaGuestAgent(payload: GuestAgentProvisionPayload): Promise<any> {
+    return this.http.post(`${this.apiUrl}/provision/vm/guest-agent`, payload).toPromise();
+  }
+
+  listTemplates(nodeId: number): Promise<any[]> {
+    return this.http.get<{ templates: any[] }>(`${this.apiUrl}/vms/node/${nodeId}/templates`)
+      .toPromise()
+      .then(response => response?.templates || []);
+  }
+
+  listIsos(nodeId: number): Promise<string[]> {
+    return this.http.get<{ isos: string[] }>(`${this.apiUrl}/vms/node/${nodeId}/isos`)
+      .toPromise()
+      .then(response => response?.isos || []);
+  }
+
+  listStorages(nodeId: number): Promise<any[]> {
+    return this.http.get<{ storages: any[] }>(`${this.apiUrl}/vms/node/${nodeId}/storages`)
+      .toPromise()
+      .then(response => response?.storages || []);
+  }
+
+  getNextVMID(nodeId: number): Promise<{ nextid: number }> {
+    return this.http.get<{ nextid: number }>(`${this.apiUrl}/vms/node/${nodeId}/nextid`)
+      .toPromise()
+      .then(response => response || { nextid: 100 });
+  }
+
+  // VM deletion
+  deleteVM(nodeId: number, vmid: number): Promise<any> {
+    return this.http.delete(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}`).toPromise();
+  }
+
+  // VM cloning
+  cloneVM(nodeId: number, vmid: number, newid: number, name?: string): Promise<any> {
+    return this.http.post(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/clone`, null, {
+      params: { newid: newid.toString(), ...(name && { name }) }
+    }).toPromise();
+  }
+
+  // Snapshot management
+  listSnapshots(nodeId: number, vmid: number): Promise<any[]> {
+    return this.http.get<{ snapshots: any[] }>(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/snapshots`)
+      .toPromise()
+      .then(response => response?.snapshots || []);
+  }
+
+  createSnapshot(nodeId: number, vmid: number, snapname: string, description?: string): Promise<any> {
+    return this.http.post(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/snapshot`, null, {
+      params: { snapname, ...(description && { description }) }
+    }).toPromise();
+  }
+
+  deleteSnapshot(nodeId: number, vmid: number, snapname: string): Promise<any> {
+    return this.http.delete(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/snapshot/${snapname}`).toPromise();
+  }
+
+  rollbackSnapshot(nodeId: number, vmid: number, snapname: string): Promise<any> {
+    return this.http.post(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/snapshot/${snapname}/rollback`, {}).toPromise();
+  }
+
+  // VM configuration
+  updateVMConfig(nodeId: number, vmid: number, config: any): Promise<any> {
+    return this.http.put(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/config`, config).toPromise();
+  }
+
+  getVMConfig(nodeId: number, vmid: number): Promise<any> {
+    return this.http.get(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/config`).toPromise();
+  }
+
+  getBootOrder(nodeId: number, vmid: number): Observable<{ boot_order?: string; boot?: string }> {
+    return this.http.get<{ boot_order?: string; boot?: string }>(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/boot-order`);
+  }
+
+  setBootOrder(nodeId: number, vmid: number, bootOrder: string): Observable<{ message: string; boot_order?: string }> {
+    return this.http.put<{ message: string; boot_order?: string }>(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/boot-order`, {
+      boot_order: bootOrder
+    });
+  }
+
+  // Disk management
+  listDisks(nodeId: number, vmid: number): Observable<{ disks: any[] }> {
+    return this.http.get<{ disks: any[] }>(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/disks`);
+  }
+
+  addDisk(nodeId: number, vmid: number, diskConfig: any): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/disks`, diskConfig);
+  }
+
+  resizeDisk(nodeId: number, vmid: number, disk: string, size: string): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/disks/resize`, { disk, size });
+  }
+
+  deleteDisk(nodeId: number, vmid: number, disk: string): Observable<{ message: string }> {
+    return this.http.delete<{ message: string }>(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/disks/${disk}`);
+  }
+
+  // Network interface management
+  listNetworkInterfaces(nodeId: number, vmid: number): Observable<{ interfaces: any[] }> {
+    return this.http.get<{ interfaces: any[] }>(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/network`);
+  }
+
+  addNetworkInterface(nodeId: number, vmid: number, interfaceConfig: any): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/network`, interfaceConfig);
+  }
+
+  updateNetworkInterface(nodeId: number, vmid: number, interfaceName: string, interfaceConfig: any): Observable<{ message: string }> {
+    return this.http.put<{ message: string }>(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/network/${interfaceName}`, interfaceConfig);
+  }
+
+  deleteNetworkInterface(nodeId: number, vmid: number, interfaceName: string): Observable<{ message: string }> {
+    return this.http.delete<{ message: string }>(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/network/${interfaceName}`);
+  }
+
+  listNetworkBridges(nodeId: number): Observable<{ bridges: any[] }> {
+    return this.http.get<{ bridges: any[] }>(`${this.apiUrl}/vms/node/${nodeId}/network/bridges`);
+  }
+
+  // Console access
+  getVNCConnection(nodeId: number, vmid: number): Observable<any> {
+    return this.http.get(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/vnc`);
+  }
+
+  // ISO/CD-ROM operations
+  mountISO(nodeId: number, vmid: number, isoVolid: string): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/cdrom/mount?iso_volid=${isoVolid}`, {});
+  }
+
+  unmountISO(nodeId: number, vmid: number): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/cdrom/unmount`, {});
+  }
+
+  // Template operations
+  getTemplates(nodeId: number): Observable<{ templates: VM[] }> {
+    return this.http.get<{ templates: VM[] }>(`${this.apiUrl}/vms/node/${nodeId}/templates`);
+  }
+
+  convertToTemplate(nodeId: number, vmid: number): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/template`, {});
+  }
+
+  cloneVm(nodeId: number, vmid: number, cloneData: any): Observable<{ upid: string }> {
+    return this.http.post<{ upid: string }>(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/clone`, cloneData);
+  }
+
+  getTaskStatus(nodeId: number, upid: string): Observable<any> {
+    return this.http.get<any>(`${this.apiUrl}/tasks/${upid}`);
+  }
+
+  reinstallOS(nodeId: number, vmid: number): Observable<{ message: string; upid: string }> {
+    return this.http.post<{ message: string; upid: string }>(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/reinstall`, {});
+  }
+}

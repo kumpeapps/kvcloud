@@ -1,0 +1,198 @@
+import { Component, Inject, OnInit } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { MatDialogModule, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
+import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { VMService } from '../../../core/services/vm.service';
+
+@Component({
+  selector: 'app-add-network-interface-dialog',
+  standalone: true,
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    MatDialogModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatSelectModule,
+    MatButtonModule,
+    MatCheckboxModule
+  ],
+  template: `
+    <h2 mat-dialog-title>Add Network Interface</h2>
+    <mat-dialog-content>
+      <form [formGroup]="interfaceForm">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Network Model</mat-label>
+          <mat-select formControlName="model">
+            <mat-option value="virtio">VirtIO (Best Performance)</mat-option>
+            <mat-option value="e1000">Intel E1000</mat-option>
+            <mat-option value="rtl8139">Realtek RTL8139</mat-option>
+            <mat-option value="vmxnet3">VMware vmxnet3</mat-option>
+          </mat-select>
+          <mat-hint>VirtIO provides the best performance</mat-hint>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Network Bridge</mat-label>
+          <mat-select formControlName="bridge">
+            @for (bridge of bridges; track bridge.iface) {
+              <mat-option [value]="bridge.iface">
+                {{ bridge.iface }}
+                @if (bridge.cidr) {
+                  <span class="bridge-info"> ({{ bridge.cidr }})</span>
+                }
+              </mat-option>
+            }
+          </mat-select>
+          @if (interfaceForm.get('bridge')?.hasError('required')) {
+            <mat-error>Bridge is required</mat-error>
+          }
+          <mat-hint>Select the network bridge to connect to</mat-hint>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>MAC Address (Optional)</mat-label>
+          <input matInput formControlName="macaddr" placeholder="auto-generated">
+          @if (interfaceForm.get('macaddr')?.hasError('pattern')) {
+            <mat-error>Invalid MAC address format (e.g., AA:BB:CC:DD:EE:FF)</mat-error>
+          }
+          <mat-hint>Leave empty for auto-generation</mat-hint>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>VLAN Tag (Optional)</mat-label>
+          <input matInput type="number" formControlName="tag" placeholder="1-4094">
+          @if (interfaceForm.get('tag')?.hasError('min')) {
+            <mat-error>VLAN tag must be between 1 and 4094</mat-error>
+          }
+          @if (interfaceForm.get('tag')?.hasError('max')) {
+            <mat-error>VLAN tag must be between 1 and 4094</mat-error>
+          }
+          <mat-hint>For VLAN segmentation</mat-hint>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Rate Limit (MB/s, Optional)</mat-label>
+          <input matInput type="number" formControlName="rate" placeholder="Unlimited">
+          @if (interfaceForm.get('rate')?.hasError('min')) {
+            <mat-error>Rate limit must be positive</mat-error>
+          }
+          <mat-hint>Leave empty for unlimited bandwidth</mat-hint>
+        </mat-form-field>
+
+        <div class="checkbox-container">
+          <mat-checkbox formControlName="firewall">
+            Enable Firewall
+          </mat-checkbox>
+          <p class="checkbox-hint">Enable VM-level firewall protection</p>
+        </div>
+      </form>
+    </mat-dialog-content>
+    <mat-dialog-actions align="end">
+      <button mat-button (click)="onCancel()">Cancel</button>
+      <button mat-raised-button color="primary" 
+              (click)="onSubmit()" 
+              [disabled]="!interfaceForm.valid || loading">
+        @if (loading) {
+          <span>Loading...</span>
+        } @else {
+          <span>Add Interface</span>
+        }
+      </button>
+    </mat-dialog-actions>
+  `,
+  styles: [`
+    mat-dialog-content {
+      min-width: 500px;
+      padding: 20px 24px;
+    }
+
+    .full-width {
+      width: 100%;
+      margin-bottom: 15px;
+    }
+
+    .checkbox-container {
+      margin: 15px 0;
+    }
+
+    .checkbox-hint {
+      margin-top: 5px;
+      font-size: 0.85em;
+      color: #666;
+    }
+
+    .bridge-info {
+      color: #666;
+      font-size: 0.9em;
+    }
+
+    mat-dialog-actions {
+      padding: 16px 24px;
+    }
+  `]
+})
+export class AddNetworkInterfaceDialogComponent implements OnInit {
+  interfaceForm: FormGroup;
+  bridges: any[] = [];
+  loading = false;
+
+  constructor(
+    private fb: FormBuilder,
+    private vmService: VMService,
+    private dialogRef: MatDialogRef<AddNetworkInterfaceDialogComponent>,
+    @Inject(MAT_DIALOG_DATA) public data: any
+  ) {
+    this.interfaceForm = this.fb.group({
+      model: ['virtio', Validators.required],
+      bridge: ['vmbr0', Validators.required],
+      macaddr: ['', [Validators.pattern(/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/)]],
+      tag: [null, [Validators.min(1), Validators.max(4094)]],
+      rate: [null, [Validators.min(1)]],
+      firewall: [true]
+    });
+  }
+
+  ngOnInit() {
+    // Load available bridges
+    this.vmService.listNetworkBridges(this.data.nodeId).subscribe({
+      next: (response) => {
+        this.bridges = response.bridges || [];
+        // Set default bridge if available
+        if (this.bridges.length > 0 && !this.interfaceForm.get('bridge')?.value) {
+          this.interfaceForm.patchValue({ bridge: this.bridges[0].iface });
+        }
+      },
+      error: (error) => {
+        console.error('Error loading bridges:', error);
+        // Fallback to default bridge
+        this.bridges = [{ iface: 'vmbr0', type: 'bridge' }];
+      }
+    });
+  }
+
+  onCancel() {
+    this.dialogRef.close();
+  }
+
+  onSubmit() {
+    if (this.interfaceForm.valid) {
+      const formValue = this.interfaceForm.value;
+      // Convert firewall boolean to 1/0
+      const config = {
+        ...formValue,
+        firewall: formValue.firewall ? 1 : 0,
+        // Remove empty optional fields
+        macaddr: formValue.macaddr || undefined,
+        tag: formValue.tag || undefined,
+        rate: formValue.rate || undefined
+      };
+      this.dialogRef.close(config);
+    }
+  }
+}

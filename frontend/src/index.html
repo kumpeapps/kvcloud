@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>KVCloud - Virtual Cloud Management</title>
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <script>
+    // Early polyfill for crypto.randomUUID to prevent TypeError in browsers lacking it
+    (function () {
+      try {
+        var cryptoObj = window.crypto || window.msCrypto;
+        if (!cryptoObj || typeof cryptoObj.randomUUID !== 'function') {
+          function uuidv4() {
+            var bytes = new Uint8Array(16);
+            if (cryptoObj && typeof cryptoObj.getRandomValues === 'function') {
+              cryptoObj.getRandomValues(bytes);
+            } else {
+              for (var i = 0; i < 16; i++) {
+                bytes[i] = Math.floor(Math.random() * 256);
+              }
+            }
+            bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+            bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant
+            var hex = Array.from(bytes, function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+            return hex.substring(0, 8) + '-' + hex.substring(8, 12) + '-' + hex.substring(12, 16) + '-' + hex.substring(16, 20) + '-' + hex.substring(20);
+          }
+          if (!cryptoObj) {
+            cryptoObj = {};
+            // attach minimal crypto to window if missing entirely
+            window.crypto = cryptoObj;
+          }
+          cryptoObj.randomUUID = uuidv4;
+        }
+      } catch (e) {
+        // Fallback in extreme cases
+        window.crypto = window.crypto || {};
+        window.crypto.randomUUID = window.crypto.randomUUID || function () {
+          var d = Date.now();
+          return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            var r = (d + Math.random() * 16) % 16 | 0;
+            d = Math.floor(d / 16);
+            return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+          });
+        };
+      }
+    })();
+  </script>
+  <script type="module">
+    // Import noVNC RFB as ES module and expose globally
+    try {
+      const module = await import('https://cdn.jsdelivr.net/npm/@novnc/novnc@1.6.0/+esm');
+      // The RFB class is at module.default.default due to double wrapping
+      window.RFB = module.default.default || module.default;
+      console.log('noVNC RFB library loaded successfully');
+      console.log('RFB is constructor:', typeof window.RFB === 'function');
+    } catch (error) {
+      console.error('Failed to load noVNC library:', error);
+    }
+  </script>
+</head>
+<body>
+  <app-root></app-root>
+</body>
+</html>

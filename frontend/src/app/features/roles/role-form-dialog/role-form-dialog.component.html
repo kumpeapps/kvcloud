@@ -1,0 +1,75 @@
+<h2 mat-dialog-title>
+  <mat-icon>{{ isEditMode ? 'edit' : 'add_circle' }}</mat-icon>
+  {{ isEditMode ? 'Edit Role' : 'Create New Role' }}
+</h2>
+
+<mat-dialog-content>
+  <div *ngIf="error()" class="error-message">
+    <mat-icon>error</mat-icon>
+    {{ error() }}
+  </div>
+
+  <form [formGroup]="roleForm" class="role-form">
+    <mat-form-field appearance="outline">
+      <mat-label>Role Name</mat-label>
+      <input matInput formControlName="name" placeholder="Enter role name">
+      <mat-icon matPrefix>shield</mat-icon>
+      <mat-error *ngIf="roleForm.get('name')?.hasError('required')">
+        Role name is required
+      </mat-error>
+      <mat-error *ngIf="roleForm.get('name')?.hasError('minlength')">
+        Role name must be at least 3 characters
+      </mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Description</mat-label>
+      <textarea matInput 
+                formControlName="description" 
+                placeholder="Describe this role's purpose"
+                rows="2"></textarea>
+      <mat-icon matPrefix>description</mat-icon>
+    </mat-form-field>
+
+    <div class="permissions-section">
+      <h3>Permissions</h3>
+      <p class="permissions-hint">Select the actions this role can perform</p>
+      
+      <div class="permissions-grid">
+        <div *ngFor="let entry of getPermissionsByResource() | keyvalue" class="resource-group">
+          <h4 class="resource-name">{{ entry.key }}</h4>
+          <div class="permissions-list">
+            <mat-checkbox 
+              *ngFor="let permission of entry.value"
+              [checked]="isPermissionSelected(permission)"
+              (change)="togglePermission(permission)"
+              class="permission-checkbox">
+              <span class="permission-action">{{ permission.action }}</span>
+              <span class="permission-description">{{ permission.description }}</span>
+            </mat-checkbox>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="selectedPermissions().size === 0" class="no-permissions-warning">
+        <mat-icon>warning</mat-icon>
+        <span>No permissions selected. This role will have no access rights.</span>
+      </div>
+    </div>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="onCancel()" [disabled]="loading()">
+    Cancel
+  </button>
+  <button mat-raised-button 
+          color="primary" 
+          (click)="onSubmit()" 
+          [disabled]="loading() || roleForm.invalid">
+    <mat-icon *ngIf="loading()">
+      <mat-spinner diameter="20"></mat-spinner>
+    </mat-icon>
+    {{ isEditMode ? 'Update' : 'Create' }}
+  </button>
+</mat-dialog-actions>

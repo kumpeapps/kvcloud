@@ -1,0 +1,153 @@
+<div class="dashboard">
+  <app-loading-spinner *ngIf="loading()" message="Loading dashboard..."></app-loading-spinner>
+
+  <div *ngIf="!loading() && stats()" class="dashboard-content">
+    <!-- Welcome Header -->
+    <div class="welcome-section">
+      <h1>Dashboard</h1>
+      <p class="subtitle" *ngIf="authService.currentUser() as user">
+        Welcome back, {{ user?.full_name || user?.username }}!
+      </p>
+    </div>
+
+    <!-- Quick Stats Cards -->
+    <div class="stats-grid">
+      <mat-card class="stat-card">
+        <mat-card-content>
+          <div class="stat-icon vms">
+            <mat-icon>dns</mat-icon>
+          </div>
+          <div class="stat-details">
+            <h2>{{ stats()?.vms?.total ?? 0 }}</h2>
+            <p>Virtual Machines</p>
+            <div class="stat-breakdown">
+              <app-status-badge status="success" [label]="(stats()?.vms?.running ?? 0) + ' Running'"></app-status-badge>
+              <app-status-badge status="default" [label]="(stats()?.vms?.stopped ?? 0) + ' Stopped'"></app-status-badge>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="stat-card">
+        <mat-card-content>
+          <div class="stat-icon clusters">
+            <mat-icon>storage</mat-icon>
+          </div>
+          <div class="stat-details">
+            <h2>{{ stats()?.clusters?.total ?? 0 }}</h2>
+            <p>Clusters</p>
+            <div class="stat-breakdown">
+              <app-status-badge status="success" [label]="(stats()?.clusters?.online ?? 0) + ' Online'"></app-status-badge>
+              <app-status-badge status="error" [label]="(stats()?.clusters?.offline ?? 0) + ' Offline'"></app-status-badge>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="stat-card">
+        <mat-card-content>
+          <div class="stat-icon cpu">
+            <mat-icon>memory</mat-icon>
+          </div>
+          <div class="stat-details">
+            <h2>{{ getCpuPercentage().toFixed(1) }}%</h2>
+            <p>CPU Usage</p>
+            <div class="stat-breakdown">
+              <mat-progress-bar mode="determinate" [value]="getCpuPercentage()" color="primary"></mat-progress-bar>
+              <span class="stat-meta">{{ stats()?.resources?.cpu?.total ?? 0 }} cores available</span>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="stat-card">
+        <mat-card-content>
+          <div class="stat-icon memory">
+            <mat-icon>sd_card</mat-icon>
+          </div>
+          <div class="stat-details">
+            <h2>{{ formatBytes(stats()?.resources?.memory?.used ?? 0) }}</h2>
+            <p>Memory Used</p>
+            <div class="stat-breakdown">
+              <mat-progress-bar mode="determinate" [value]="getMemoryPercentage()" color="accent"></mat-progress-bar>
+              <span class="stat-meta">{{ formatBytes(stats()?.resources?.memory?.total ?? 0) }} total</span>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="actions-section">
+      <h2>Quick Actions</h2>
+      <div class="actions-grid">
+        <button mat-raised-button color="primary" routerLink="/vms">
+          <mat-icon>add</mat-icon>
+          Create VM
+        </button>
+        <button mat-raised-button routerLink="/clusters">
+          <mat-icon>add_circle</mat-icon>
+          Add Cluster
+        </button>
+        <button mat-raised-button routerLink="/vms">
+          <mat-icon>play_arrow</mat-icon>
+          Start VM
+        </button>
+        <button mat-raised-button routerLink="/monitoring">
+          <mat-icon>insights</mat-icon>
+          View Monitoring
+        </button>
+      </div>
+    </div>
+
+    <!-- Recent Activity & Alerts -->
+    <div class="bottom-section">
+      <mat-card class="activity-card">
+        <mat-card-header>
+          <mat-card-title>Recent Activity</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <mat-list>
+            <mat-list-item>
+              <mat-icon matListItemIcon>check_circle</mat-icon>
+              <div matListItemTitle>VM 'web-server-01' started</div>
+              <div matListItemLine>2 minutes ago</div>
+            </mat-list-item>
+            <mat-list-item>
+              <mat-icon matListItemIcon>person_add</mat-icon>
+              <div matListItemTitle>New user 'john.doe' created</div>
+              <div matListItemLine>15 minutes ago</div>
+            </mat-list-item>
+            <mat-list-item>
+              <mat-icon matListItemIcon>cloud_upload</mat-icon>
+              <div matListItemTitle>Backup completed successfully</div>
+              <div matListItemLine>1 hour ago</div>
+            </mat-list-item>
+          </mat-list>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="alerts-card">
+        <mat-card-header>
+          <mat-card-title>System Alerts</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="alert-item warning">
+            <mat-icon>warning</mat-icon>
+            <div>
+              <strong>High CPU Usage</strong>
+              <p>Node 'pve-node-02' CPU usage above 80%</p>
+            </div>
+          </div>
+          <div class="alert-item info">
+            <mat-icon>info</mat-icon>
+            <div>
+              <strong>Update Available</strong>
+              <p>Proxmox VE 8.1 is now available</p>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    </div>
+  </div>
+</div>

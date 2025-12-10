@@ -1,0 +1,143 @@
+<h2 mat-dialog-title>{{ isEditing ? 'Edit Cluster' : 'Add Cluster' }}</h2>
+
+<mat-dialog-content>
+  <form [formGroup]="clusterForm">
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Cluster Name</mat-label>
+      <input matInput formControlName="name" required>
+      <mat-error *ngIf="clusterForm.get('name')?.hasError('required')">
+        Name is required
+      </mat-error>
+      <mat-error *ngIf="clusterForm.get('name')?.hasError('minlength')">
+        Name must be at least 2 characters
+      </mat-error>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Description</mat-label>
+      <textarea matInput formControlName="description" rows="3"></textarea>
+    </mat-form-field>
+  </form>
+
+  <mat-divider></mat-divider>
+
+  <div class="nodes-section">
+    <div class="section-header">
+      <h3>Proxmox Nodes</h3>
+      <button mat-icon-button color="primary" (click)="toggleNodeForm()" [disabled]="loading">
+        <mat-icon>{{ showNodeForm() ? 'close' : 'add' }}</mat-icon>
+      </button>
+    </div>
+
+    <div *ngIf="nodes().length === 0 && !showNodeForm()" class="no-nodes">
+      <mat-icon>dns</mat-icon>
+      <p>No nodes added yet. Click the + button to add a Proxmox node.</p>
+    </div>
+
+    <mat-list *ngIf="nodes().length > 0">
+      <mat-list-item *ngFor="let node of nodes(); let i = index" class="node-item">
+        <mat-icon matListItemIcon>dns</mat-icon>
+        <div matListItemTitle>{{ node.name }}</div>
+        <div matListItemLine>{{ node.host }}:{{ node.port }} ({{ node.username }})</div>
+        <div matListItemMeta>
+          <button mat-icon-button (click)="editNode(i)" [disabled]="loading">
+            <mat-icon>edit</mat-icon>
+          </button>
+          <button mat-icon-button color="warn" (click)="removeNode(i)" [disabled]="loading">
+            <mat-icon>delete</mat-icon>
+          </button>
+        </div>
+      </mat-list-item>
+    </mat-list>
+
+    <mat-card *ngIf="showNodeForm()" class="node-form-card">
+      <mat-card-header>
+        <mat-card-title>{{ editingNodeIndex !== null ? 'Edit Node' : 'Add Node' }}</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <form [formGroup]="nodeForm">
+          <div class="form-row">
+            <mat-form-field appearance="outline" class="half-width">
+              <mat-label>Node Name</mat-label>
+              <input matInput formControlName="name" placeholder="pve-node-01">
+              <mat-error *ngIf="nodeForm.get('name')?.hasError('required')">
+                Node name is required
+              </mat-error>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="half-width">
+              <mat-label>Host/IP</mat-label>
+              <input matInput formControlName="host" placeholder="192.168.1.100">
+              <mat-error *ngIf="nodeForm.get('host')?.hasError('required')">
+                Host is required
+              </mat-error>
+            </mat-form-field>
+          </div>
+
+          <div class="form-row">
+            <mat-form-field appearance="outline" class="half-width">
+              <mat-label>Port</mat-label>
+              <input matInput type="number" formControlName="port">
+              <mat-error *ngIf="nodeForm.get('port')?.hasError('required')">
+                Port is required
+              </mat-error>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="half-width">
+              <mat-label>Username</mat-label>
+              <input matInput formControlName="username" placeholder="root@pam">
+              <mat-error *ngIf="nodeForm.get('username')?.hasError('required')">
+                Username is required
+              </mat-error>
+            </mat-form-field>
+          </div>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Password</mat-label>
+            <input matInput type="password" formControlName="password">
+            <mat-error *ngIf="nodeForm.get('password')?.hasError('required')">
+              Password is required
+            </mat-error>
+          </mat-form-field>
+
+          <mat-checkbox formControlName="verify_ssl">Verify SSL Certificate</mat-checkbox>
+
+          <!-- SSH Credentials Section -->
+          <div class="section-divider">SSH Credentials (for Cloud Image Downloads)</div>
+
+          <div class="form-row">
+            <mat-form-field appearance="outline" class="half-width">
+              <mat-label>SSH Username</mat-label>
+              <input matInput formControlName="ssh_username" placeholder="root">
+              <mat-hint>Default is 'root'</mat-hint>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="half-width">
+              <mat-label>SSH Password</mat-label>
+              <input matInput type="password" formControlName="ssh_password">
+              <mat-hint>Optional</mat-hint>
+            </mat-form-field>
+          </div>
+        </form>
+      </mat-card-content>
+      <mat-card-actions align="end">
+        <button mat-button (click)="toggleNodeForm()">Cancel</button>
+        <button mat-raised-button color="primary" (click)="addNode()" [disabled]="!nodeForm.valid">
+          {{ editingNodeIndex !== null ? 'Update' : 'Add' }} Node
+        </button>
+      </mat-card-actions>
+    </mat-card>
+
+    <mat-error *ngIf="error" class="form-error">
+      {{ error }}
+    </mat-error>
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="onCancel()" [disabled]="loading">Cancel</button>
+  <button mat-raised-button color="primary" (click)="onSubmit()" [disabled]="!clusterForm.valid || loading">
+    <mat-spinner *ngIf="loading" diameter="20"></mat-spinner>
+    <span *ngIf="!loading">{{ isEditing ? 'Update' : 'Create' }}</span>
+  </button>
+</mat-dialog-actions>
