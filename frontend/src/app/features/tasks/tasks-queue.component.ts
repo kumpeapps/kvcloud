@@ -123,12 +123,12 @@ import { MaterialModule } from '../../shared/material.module';
 export class TasksQueueComponent {
   private tasksService = inject(TasksService);
 
-  tasks$: Observable<TaskStatus[]> = timer(0, 2000).pipe(
+  tasks$: Observable<TaskStatus[]> = timer(0, 5000).pipe(
     startWith(0),
     switchMap(() => this.tasksService.listTasks())
   );
 
-  history$: Observable<TaskStatus[]> = timer(0, 5000).pipe(
+  history$: Observable<TaskStatus[]> = timer(0, 10000).pipe(
     startWith(0),
     switchMap(() => this.tasksService.listHistory())
   );
@@ -136,7 +136,7 @@ export class TasksQueueComponent {
   onClearHistory() {
     this.tasksService.clearHistory().subscribe(() => {
       // Trigger immediate refresh of history after clearing
-      this.history$ = timer(0, 5000).pipe(
+      this.history$ = timer(0, 10000).pipe(
         startWith(0),
         switchMap(() => this.tasksService.listHistory())
       );

@@ -17,6 +17,7 @@ services:
       - INITIAL_ADMIN_EMAIL=admin@kvcloud.local
       - INITIAL_ADMIN_PASSWORD=admin123
       - INITIAL_ADMIN_FULL_NAME=Administrator
+      - API_URL=http://172.16.2.69:8000
     volumes:
       - ./backend:/app
     networks:
@@ -33,6 +34,8 @@ services:
     command: sh -c "npx ng serve --host 0.0.0.0 --disable-host-check"
     ports:
       - "4200:4200"
+    environment:
+      - API_URL=http://172.16.2.69:8000
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/angular.json:/app/angular.json

@@ -201,7 +201,7 @@ export class VMService {
   }
 
   resizeDisk(nodeId: number, vmid: number, disk: string, size: string): Observable<any> {
-    return this.http.put(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/disk/${disk}/resize`, { size });
+    return this.http.put(`${this.apiUrl}/vms/node/${nodeId}/vm/${vmid}/disks/${disk}/resize`, { size_increment: size });
   }
 
   deleteDisk(nodeId: number, vmid: number, disk: string): Observable<any> {

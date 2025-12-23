@@ -8,20 +8,20 @@ history_tasks: List[Dict[str, Any]] = []
 
 
 def archive_task(task_id: str) -> None:
-    """Archive a task from active into history without removing it from active.
-    Adds an 'archived' flag to avoid duplicate entries.
-    """
+    """Move a task from active to history when it completes."""
     task = active_tasks.get(task_id)
     if not task:
+        print(f"[ARCHIVE] Task {task_id} not found in active_tasks")
         return
-    if task.get('archived'):
-        return
-    # Copy with archived flag
+    
+    # Copy task to history with archived flag
     copy = dict(task)
     copy['archived'] = True
     history_tasks.append(copy)
-    # Mark active as archived too to prevent duplicate appends
-    task['archived'] = True
+    print(f"[ARCHIVE] Task {task_id} archived to history (status={copy.get('status')})")
+    
+    # Remove from active tasks
+    del active_tasks[task_id]
 
 
 def clear_history() -> int:

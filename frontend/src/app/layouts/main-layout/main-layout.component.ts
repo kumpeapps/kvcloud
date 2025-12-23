@@ -69,7 +69,7 @@ export class MainLayoutComponent {
 
     // Poll tasks and update badge + completion toasts
     const lastActiveIds = new Set<string>();
-    timer(0, 3000).pipe(
+    timer(0, 15000).pipe(
       switchMap(() => this.tasksService.listTasks())
     ).subscribe((tasks: TaskStatus[]) => {
       const activeTasks = tasks.filter(t => t.status !== 'completed' && t.status !== 'failed');

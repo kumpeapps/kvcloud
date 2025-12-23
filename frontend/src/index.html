@@ -8,6 +8,13 @@
   <link rel="icon" type="image/x-icon" href="favicon.ico">
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <script src="config.js"></script>
+  <script>
+    // Runtime environment configuration
+    // This allows setting API_URL via environment variable at build time or runtime
+    window.ENV = window.ENV || {};
+    // API_URL can be injected at build time or overridden via config.js
+  </script>
   <script>
     // Early polyfill for crypto.randomUUID to prevent TypeError in browsers lacking it
     (function () {

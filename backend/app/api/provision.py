@@ -44,6 +44,9 @@ class GuestAgentProvisionRequest(BaseModel):
     docker_compose_path: Optional[str] = "/root/docker-compose.yml"
     start_docker_compose: Optional[bool] = False
     docker_compose_files: Optional[List[DockerComposeFile]] = None
+    docker_registry_url: Optional[str] = None
+    docker_registry_username: Optional[str] = None
+    docker_registry_password: Optional[str] = None
     # Network: if omitted, will resolve from DB/IP pools
     write_network: bool = True
 
@@ -61,6 +64,7 @@ async def provision_vm_background(
     config: Dict[str, Any]
 ):
     """Background task for VM provisioning with retry logic."""
+    print(f"[{task_id}] ===== PROVISION TASK STARTED =====")
     def update_progress(progress: int, message: str):
         """Update task progress."""
         if task_id in active_tasks:
@@ -81,15 +85,19 @@ async def provision_vm_background(
                 from app.models.vm_assignment import VMAssignment
                 stmt = select(VMAssignment).where(
                     (VMAssignment.vmid == vmid) &
-                    (VMAssignment.cluster_id == node_id)
+                    (VMAssignment.node_id == node_id)
                 )
                 result_query = await db.execute(stmt)
                 vm_assignment = result_query.scalar_one_or_none()
                 
-                # Use VM name as hostname if not provided
-                if vm_assignment and vm_assignment.name and not config.get('hostname'):
+                # Always use VM name as hostname (from assignment or config)
+                if vm_assignment and vm_assignment.name:
                     config['hostname'] = vm_assignment.name
-                    print(f"[{task_id}] Using VM name as hostname: {vm_assignment.name}")
+                    print(f"[{task_id}] Using VM assignment name as hostname: {vm_assignment.name}")
+                elif not config.get('hostname'):
+                    # If no VM assignment or name, use provided hostname or VM ID as fallback
+                    config['hostname'] = f"vm-{vmid}"
+                    print(f"[{task_id}] Using fallback hostname: vm-{vmid}")
                 
                 service = ProxmoxService(db)
                 
@@ -122,6 +130,21 @@ async def provision_vm_background(
                         active_tasks[task_id]["error"] = f"Failed steps: {failed_steps}"
                         active_tasks[task_id]["result"] = result
                         active_tasks[task_id]["completed_at"] = datetime.now().isoformat()
+                        
+                        # Unlock VM on failure (so user can try again or investigate)
+                        from app.models.vm_assignment import VMAssignment
+                        stmt_unlock = select(VMAssignment).where(
+                            (VMAssignment.vmid == vmid) &
+                            (VMAssignment.node_id == node_id)
+                        )
+                        result_unlock = await db.execute(stmt_unlock)
+                        vm_assign = result_unlock.scalar_one_or_none()
+                        if vm_assign:
+                            vm_assign.is_locked = False
+                            vm_assign.lock_reason = None
+                            await db.commit()
+                            print(f"[{task_id}] Unlocked VM on provisioning failure")
+                        
                         archive_task(task_id)
                         return
                 else:
@@ -130,6 +153,21 @@ async def provision_vm_background(
                     active_tasks[task_id]["status"] = "completed"
                     active_tasks[task_id]["result"] = result
                     active_tasks[task_id]["completed_at"] = datetime.now().isoformat()
+                    
+                    # Unlock VM on success
+                    from app.models.vm_assignment import VMAssignment
+                    stmt_unlock = select(VMAssignment).where(
+                        (VMAssignment.vmid == vmid) &
+                        (VMAssignment.node_id == node_id)
+                    )
+                    result_unlock = await db.execute(stmt_unlock)
+                    vm_assign = result_unlock.scalar_one_or_none()
+                    if vm_assign:
+                        vm_assign.is_locked = False
+                        vm_assign.lock_reason = None
+                        await db.commit()
+                        print(f"[{task_id}] Unlocked VM on provisioning success")
+                    
                     archive_task(task_id)
                     return
             
@@ -151,6 +189,22 @@ async def provision_vm_background(
                 active_tasks[task_id]["status"] = "failed"
                 active_tasks[task_id]["error"] = str(e)
                 active_tasks[task_id]["completed_at"] = datetime.now().isoformat()
+                
+                # Unlock VM on exception
+                async with async_session_maker() as db_unlock:
+                    from app.models.vm_assignment import VMAssignment
+                    stmt_unlock = select(VMAssignment).where(
+                        (VMAssignment.vmid == vmid) &
+                        (VMAssignment.node_id == node_id)
+                    )
+                    result_unlock = await db_unlock.execute(stmt_unlock)
+                    vm_assign = result_unlock.scalar_one_or_none()
+                    if vm_assign:
+                        vm_assign.is_locked = False
+                        vm_assign.lock_reason = None
+                        await db_unlock.commit()
+                        print(f"[{task_id}] Unlocked VM on provisioning exception")
+                
                 archive_task(task_id)
                 return
 
@@ -197,6 +251,11 @@ async def provision_vm_via_guest_agent(
         cfg['install_docker'] = req.install_docker
     else:
         cfg['install_docker'] = bool(req.docker_compose_content or req.docker_compose_files)
+    if req.docker_registry_url and req.docker_registry_username and req.docker_registry_password:
+        cfg['docker_registry_url'] = req.docker_registry_url
+        cfg['docker_registry_username'] = req.docker_registry_username
+        cfg['docker_registry_password'] = req.docker_registry_password
+        cfg['install_docker'] = True
 
     # Network YAML from resolver if requested
     if req.write_network:

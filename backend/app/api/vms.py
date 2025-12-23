@@ -6,6 +6,7 @@ from sqlalchemy import select
 from pydantic import BaseModel, Field
 from datetime import datetime
 import asyncio
+import json
 
 from app.core.database import get_db
 from app.models.user import User
@@ -15,6 +16,7 @@ from app.core.rbac import require_permission
 from app.core.tasks_store import active_tasks, archive_task
 # Avoid potential local shadowing issues by importing the module and referencing the class via the module.
 from app.services import proxmox as proxmox_service
+from app.models.compose_template import ComposeTemplate
 
 # Provide a safe alias for existing usages to avoid NameError in endpoints still
 # referencing `ProxmoxService` directly. Prefer module-qualified references for
@@ -84,6 +86,42 @@ class VMCloneRequest(BaseModel):
     full: int = Field(1, description="Full clone (1) or linked clone (0)")
     storage: Optional[str] = Field(None, description="Target storage for disks")
     description: Optional[str] = Field(None, description="Description for cloned VM")
+
+
+class ComposeFileEntry(BaseModel):
+    path: str = "/root/docker-compose.yml"
+    content: str
+    start_on_deploy: bool = False
+    start_on_boot: bool = False
+    template_id: Optional[int] = None
+    variables: Optional[Dict[str, Any]] = None
+    update_on_template_update: bool = False
+    id: Optional[str] = None  # client-generated id for tracking
+
+
+class ComposeFileCreate(ComposeFileEntry):
+    pass
+
+
+class ComposeTemplateCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    content: str
+    variables: Optional[List[Dict[str, Any]]] = None  # list of {name, description, default}
+    auto_update: bool = False
+
+
+class ComposeTemplateUpdate(ComposeTemplateCreate):
+    pass
+
+
+class ComposeFromTemplateRequest(BaseModel):
+    template_id: int
+    variables: Dict[str, Any] = {}
+    path: str = "/root/docker-compose.yml"
+    start_on_deploy: bool = False
+    start_on_boot: bool = False
+    update_on_template_update: bool = False
 
 
 class VMConfigUpdate(BaseModel):
@@ -741,34 +779,52 @@ async def create_vm_background(
             update_progress(85, "⏳ Waiting for guest agent...")
             await asyncio.sleep(10)
             
-            # Execute provisioning (waits for agent readiness internally)
-            update_progress(87, "🤖 Running provisioning via guest agent...")
-            prov_result = await service.provision_vm_via_guest_agent(node_id, vm_data.vmid, cfg)
-            print(f"[{task_id}] Provisioning result: {prov_result}")
+            # Execute provisioning as separate background task (fire-and-forget)
+            update_progress(87, "🤖 Queueing provisioning task...")
+            print(f"[{task_id}] Queuing provisioning task for VM {vm_data.vmid}")
             
-            # Restart VM to apply provisioning changes (networking, etc.)
-            update_progress(95, "🔄 Restarting VM to apply changes...")
-            await service.restart_vm(node_id, vm_data.vmid)
-            print(f"[{task_id}] VM restarted after provisioning")
+            # Create provision task ID
+            provision_task_id = f"provision-{node_id}-{vm_data.vmid}-{int(datetime.now().timestamp())}"
+            active_tasks[provision_task_id] = {
+                "id": provision_task_id,
+                "type": "provision",
+                "status": "running",
+                "progress": 0,
+                "message": "Starting provisioning...",
+                "node_id": node_id,
+                "vmid": vm_data.vmid,
+                "started_at": datetime.now().isoformat()
+            }
+            print(f"[{task_id}] Created provision task: {provision_task_id}")
+            
+            # Start provisioning in background (don't await it)
+            from app.api.provision import provision_vm_background
+            asyncio.create_task(provision_vm_background(provision_task_id, node_id, vm_data.vmid, cfg))
+            print(f"[{task_id}] Queued provision task: {provision_task_id}")
+            
+            update_progress(100, f"✅ VM {vm_data.vmid} created. Provisioning in background...")
         
-        update_progress(100, f"✅ VM {vm_data.vmid} created successfully!")
-        
-        # Unlock VM after successful creation
-        assignment = await db.get(VMAssignment, assignment.id) if 'assignment' in locals() else None
-        if not assignment:
-            # Fetch by vmid and user_id if assignment variable not available
-            result = await db.execute(
-                select(VMAssignment).where(
-                    VMAssignment.vmid == vm_data.vmid,
-                    VMAssignment.user_id == current_user.id
+        # Unlock VM after successful creation (unless provisioning will run)
+        if not vm_data.provision_via_guest_agent:
+            # Unlock now if no provisioning needed
+            assignment = await db.get(VMAssignment, assignment.id) if 'assignment' in locals() else None
+            if not assignment:
+                # Fetch by vmid and user_id if assignment variable not available
+                result = await db.execute(
+                    select(VMAssignment).where(
+                        VMAssignment.vmid == vm_data.vmid,
+                        VMAssignment.user_id == current_user.id
+                    )
                 )
-            )
-            assignment = result.scalar_one_or_none()
-        
-        if assignment:
-            assignment.is_locked = False
-            assignment.lock_reason = None
-            await db.commit()
+                assignment = result.scalar_one_or_none()
+            
+            if assignment:
+                assignment.is_locked = False
+                assignment.lock_reason = None
+                await db.commit()
+        else:
+            # Keep locked during provisioning - will be unlocked by provision_vm_background task
+            print(f"[{task_id}] VM remains locked during provisioning")
         
         active_tasks[task_id]["status"] = "completed"
         active_tasks[task_id]["assigned_ip"] = assigned_ip
@@ -1219,6 +1275,38 @@ async def update_vm_config(
             )
         
         result = await service.update_vm_config(node_id, vmid, config_dict)
+        
+        # If name was changed, trigger reprovision to update hostname
+        if config.name:
+            from app.api.cloud_init import _resolve_vm_network_config, _build_default_network_block
+            import yaml
+            
+            stmt = select(VMAssignment).where(
+                VMAssignment.vmid == vmid,
+                VMAssignment.node_id == node_id
+            )
+            assignment_result = await db.execute(stmt)
+            assignment = assignment_result.scalar_one_or_none()
+            
+            if assignment:
+                # Update VM name in assignment
+                assignment.name = config.name
+                
+                # Trigger reprovision with new hostname
+                reprov_config = {
+                    'hostname': config.name
+                }
+                
+                # Include network config
+                vm_net = await _resolve_vm_network_config(db, vmid)
+                if vm_net and (vm_net.get('enable_dhcp') or vm_net.get('ip_address')):
+                    network_block = _build_default_network_block(vm_net)
+                    reprov_config['network_yaml'] = yaml.dump(network_block, default_flow_style=False)
+                
+                assignment.set_pending_provision(reprov_config)
+                await db.commit()
+                print(f"[VM Config Update] Triggered reprovision for VM {vmid} with new hostname: {config.name}")
+        
         return {
             "message": "VM configuration updated successfully",
             "task": result
@@ -1771,9 +1859,12 @@ async def resize_vm_disk(
     current_user: User = Depends(get_current_user)
 ):
     """Resize a VM disk (can only increase size)."""
+    import traceback
     service = ProxmoxService(db)
     try:
+        print(f"Resize disk request: node_id={node_id}, vmid={vmid}, disk_id={disk_id}, size_increment={resize_config.size_increment}")
         success = await service.resize_vm_disk(node_id, vmid, disk_id, resize_config.size_increment)
+        print(f"Resize result: {success}")
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1783,6 +1874,8 @@ async def resize_vm_disk(
     except HTTPException:
         raise
     except Exception as e:
+        print(f"Exception in resize_vm_disk: {e}")
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to resize disk: {str(e)}"
@@ -1918,3 +2011,380 @@ async def delete_vm_network_interface(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete network interface: {str(e)}"
         )
+
+
+class QueueProvisionRequest(BaseModel):
+    """Request model for queueing provision for agent."""
+    default_user: Optional[str] = None
+    default_password: Optional[str] = None
+    ssh_authorized_keys: Optional[List[str]] = None
+    ssh_pwauth: Optional[bool] = None
+    packages: Optional[List[str]] = None
+    hostname: Optional[str] = None
+    timezone: Optional[str] = None
+    docker_compose_content: Optional[str] = None
+    docker_compose_path: Optional[str] = "/root/docker-compose.yml"
+    start_docker_compose: Optional[bool] = False
+    docker_registry_url: Optional[str] = None
+    docker_registry_username: Optional[str] = None
+    docker_registry_password: Optional[str] = None
+    write_network: bool = True
+
+
+@router.post("/{node_id}/{vmid}/queue-provision")
+@require_permission("vm", "update")
+async def queue_provision_for_agent(
+    node_id: int,
+    vmid: int,
+    req: QueueProvisionRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Queue a provision configuration for the agent to pick up and execute.
+    
+    This is used by the frontend retry provision button to queue work for the agent
+    instead of executing immediately via QEMU guest agent.
+    """
+    from app.api.cloud_init import _ensure_hashed_password, _resolve_vm_network_config, _build_default_network_block
+    import yaml
+    
+    # Get VM assignment
+    result = await db.execute(
+        select(VMAssignment).where(
+            VMAssignment.vmid == vmid,
+            VMAssignment.node_id == node_id
+        )
+    )
+    assignment = result.scalar_one_or_none()
+    
+    if not assignment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="VM assignment not found"
+        )
+    
+    # Build config
+    config: Dict[str, Any] = {}
+    if req.default_user:
+        config['default_user'] = req.default_user
+    if req.default_password:
+        config['password_hash'] = _ensure_hashed_password(req.default_password)
+    if req.ssh_authorized_keys:
+        config['ssh_authorized_keys'] = req.ssh_authorized_keys
+    if req.ssh_pwauth is not None:
+        config['ssh_pwauth'] = req.ssh_pwauth
+    if req.packages:
+        config['packages'] = req.packages
+    
+    # Always use VM assignment name as hostname
+    if assignment.name:
+        config['hostname'] = assignment.name
+        print(f"[Queue Provision] Setting hostname from VM assignment: {assignment.name}")
+    elif req.hostname:
+        config['hostname'] = req.hostname
+        print(f"[Queue Provision] Using provided hostname: {req.hostname}")
+    else:
+        config['hostname'] = f"vm-{vmid}"
+        print(f"[Queue Provision] Using default hostname: vm-{vmid}")
+    
+    if req.timezone:
+        config['timezone'] = req.timezone
+    if req.docker_compose_content:
+        config['docker_compose_content'] = req.docker_compose_content
+        config['docker_compose_path'] = req.docker_compose_path
+        config['start_docker_compose'] = req.start_docker_compose
+        config['install_docker'] = True
+    if req.docker_registry_url and req.docker_registry_username and req.docker_registry_password:
+        config['docker_registry_url'] = req.docker_registry_url
+        config['docker_registry_username'] = req.docker_registry_username
+        config['docker_registry_password'] = req.docker_registry_password
+        config['install_docker'] = True
+    
+    # Add network config if requested
+    if req.write_network:
+        vm_net = await _resolve_vm_network_config(db, vmid)
+        if vm_net and (vm_net.get('enable_dhcp') or vm_net.get('ip_address')):
+            network_block = _build_default_network_block(vm_net)
+            config['network_yaml'] = yaml.dump(network_block, default_flow_style=False)
+    
+    # Set pending provision
+    assignment.set_pending_provision(config)
+    await db.commit()
+    
+    return {
+        "message": "Provision queued for agent",
+        "vmid": vmid,
+        "provision_pending": True,
+        "agent_installed": assignment.agent_installed
+    }
+
+
+@router.get("/{node_id}/{vmid}/pending-provision")
+@require_permission("vm", "read")
+async def get_pending_provision(
+    node_id: int,
+    vmid: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get pending provision status and config for a VM."""
+    result = await db.execute(
+        select(VMAssignment).where(
+            VMAssignment.vmid == vmid,
+            VMAssignment.node_id == node_id
+        )
+    )
+    assignment = result.scalar_one_or_none()
+    
+    if not assignment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="VM assignment not found"
+        )
+    
+    return {
+        "provision_pending": assignment.provision_pending,
+        "pending_config": assignment.get_pending_provision_config() if assignment.provision_pending else None,
+        "agent_installed": assignment.agent_installed,
+        "last_agent_checkin": assignment.last_agent_checkin.isoformat() if assignment.last_agent_checkin else None
+    }
+
+
+# ---------------------------- Compose Templates ----------------------------
+
+
+@router.get("/compose-templates")
+@require_permission("vm", "read")
+async def list_compose_templates(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    result = await db.execute(select(ComposeTemplate))
+    templates = result.scalars().all()
+    return [
+        {
+            "id": t.id,
+            "name": t.name,
+            "description": t.description,
+            "content": t.content,
+            "variables": json.loads(t.variables) if t.variables else [],
+            "auto_update": t.auto_update,
+        }
+        for t in templates
+    ]
+
+
+@router.post("/compose-templates")
+@require_permission("vm", "update")
+async def create_compose_template(
+    tpl: ComposeTemplateCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    tmpl = ComposeTemplate(
+        name=tpl.name,
+        description=tpl.description,
+        content=tpl.content,
+        variables=json.dumps(tpl.variables) if tpl.variables else None,
+        auto_update=tpl.auto_update,
+    )
+    db.add(tmpl)
+    await db.commit()
+    await db.refresh(tmpl)
+    return {"id": tmpl.id, "message": "Template created"}
+
+
+@router.put("/compose-templates/{template_id}")
+@require_permission("vm", "update")
+async def update_compose_template(
+    template_id: int,
+    tpl: ComposeTemplateUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    result = await db.execute(select(ComposeTemplate).where(ComposeTemplate.id == template_id))
+    tmpl = result.scalar_one_or_none()
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+    tmpl.name = tpl.name
+    tmpl.description = tpl.description
+    tmpl.content = tpl.content
+    tmpl.variables = json.dumps(tpl.variables) if tpl.variables else None
+    tmpl.auto_update = tpl.auto_update
+    await db.commit()
+    return {"message": "Template updated"}
+
+
+@router.delete("/compose-templates/{template_id}")
+@require_permission("vm", "update")
+async def delete_compose_template(
+    template_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    await db.execute(
+        ComposeTemplate.__table__.delete().where(ComposeTemplate.id == template_id)
+    )
+    await db.commit()
+    return {"message": "Template deleted"}
+
+
+def _render_template(content: str, variables: Dict[str, Any]) -> str:
+    try:
+        return content.format(**variables)
+    except Exception:
+        return content
+
+
+# ---------------------------- VM Compose Files ----------------------------
+
+
+@router.get("/{node_id}/{vmid}/compose-files")
+@require_permission("vm", "read")
+async def list_compose_files(
+    node_id: int,
+    vmid: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    result = await db.execute(select(VMAssignment).where(VMAssignment.vmid == vmid, VMAssignment.node_id == node_id))
+    assignment = result.scalar_one_or_none()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="VM not found")
+    return assignment.get_compose_files()
+
+
+@router.post("/{node_id}/{vmid}/compose-files")
+@require_permission("vm", "update")
+async def add_compose_file(
+    node_id: int,
+    vmid: int,
+    body: ComposeFileCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    result = await db.execute(select(VMAssignment).where(VMAssignment.vmid == vmid, VMAssignment.node_id == node_id))
+    assignment = result.scalar_one_or_none()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="VM not found")
+
+    entry = body.model_dump()
+    if not entry.get('id'):
+        entry['id'] = f"cf-{int(datetime.now().timestamp()*1000)}"
+
+    files = assignment.get_compose_files()
+    files.append(entry)
+    assignment.set_compose_files(files)
+
+    # Queue reprovision
+    cfg = assignment.get_pending_provision_config() or {}
+    cfg['docker_compose_files'] = files
+    cfg['install_docker'] = True
+    assignment.set_pending_provision(cfg)
+    await db.commit()
+    return {"message": "Compose file added", "entry": entry, "provision_pending": True}
+
+
+@router.put("/{node_id}/{vmid}/compose-files/{compose_id}")
+@require_permission("vm", "update")
+async def update_compose_file(
+    node_id: int,
+    vmid: int,
+    compose_id: str,
+    body: ComposeFileCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    result = await db.execute(select(VMAssignment).where(VMAssignment.vmid == vmid, VMAssignment.node_id == node_id))
+    assignment = result.scalar_one_or_none()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="VM not found")
+
+    files = assignment.get_compose_files()
+    updated = False
+    for idx, f in enumerate(files):
+        if f.get('id') == compose_id:
+            new_entry = body.model_dump()
+            new_entry['id'] = compose_id
+            files[idx] = new_entry
+            updated = True
+            break
+    if not updated:
+        raise HTTPException(status_code=404, detail="Compose entry not found")
+
+    assignment.set_compose_files(files)
+    cfg = assignment.get_pending_provision_config() or {}
+    cfg['docker_compose_files'] = files
+    cfg['install_docker'] = True
+    assignment.set_pending_provision(cfg)
+    await db.commit()
+    return {"message": "Compose file updated", "provision_pending": True}
+
+
+@router.delete("/{node_id}/{vmid}/compose-files/{compose_id}")
+@require_permission("vm", "update")
+async def delete_compose_file(
+    node_id: int,
+    vmid: int,
+    compose_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    result = await db.execute(select(VMAssignment).where(VMAssignment.vmid == vmid, VMAssignment.node_id == node_id))
+    assignment = result.scalar_one_or_none()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="VM not found")
+
+    files = assignment.get_compose_files()
+    files = [f for f in files if f.get('id') != compose_id]
+    assignment.set_compose_files(files)
+    cfg = assignment.get_pending_provision_config() or {}
+    cfg['docker_compose_files'] = files
+    cfg['install_docker'] = True if files else cfg.get('install_docker')
+    assignment.set_pending_provision(cfg)
+    await db.commit()
+    return {"message": "Compose file removed", "provision_pending": True}
+
+
+@router.post("/{node_id}/{vmid}/compose-from-template")
+@require_permission("vm", "update")
+async def add_compose_from_template(
+    node_id: int,
+    vmid: int,
+    req: ComposeFromTemplateRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    tmpl_result = await db.execute(select(ComposeTemplate).where(ComposeTemplate.id == req.template_id))
+    tmpl = tmpl_result.scalar_one_or_none()
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    rendered = _render_template(tmpl.content, req.variables or {})
+
+    result = await db.execute(select(VMAssignment).where(VMAssignment.vmid == vmid, VMAssignment.node_id == node_id))
+    assignment = result.scalar_one_or_none()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="VM not found")
+
+    entry = {
+        "id": f"tpl-{req.template_id}-{int(datetime.now().timestamp()*1000)}",
+        "path": req.path,
+        "content": rendered,
+        "start_on_deploy": req.start_on_deploy,
+        "start_on_boot": req.start_on_boot,
+        "template_id": req.template_id,
+        "variables": req.variables or {},
+        "update_on_template_update": req.update_on_template_update,
+    }
+
+    files = assignment.get_compose_files()
+    files.append(entry)
+    assignment.set_compose_files(files)
+    cfg = assignment.get_pending_provision_config() or {}
+    cfg['docker_compose_files'] = files
+    cfg['install_docker'] = True
+    assignment.set_pending_provision(cfg)
+    await db.commit()
+    return {"message": "Compose added from template", "entry": entry, "provision_pending": True}
+

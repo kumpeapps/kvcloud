@@ -117,6 +117,10 @@ class VmCloudInitOverridesApply(BaseModel):
     docker_compose_content: str | None = None
     docker_compose_path: str | None = None
     start_docker_compose: bool | None = None
+    # Docker registry auth
+    docker_registry_url: str | None = None
+    docker_registry_username: str | None = None
+    docker_registry_password: str | None = None
     # Locale/Time
     timezone: str | None = None
     locale: str | None = None
@@ -238,6 +242,8 @@ def _apply_overrides_to_profile(profile: CloudInitProfile, overrides: VmCloudIni
     if overrides.start_docker_compose is not None:
         profile.start_docker_compose = overrides.start_docker_compose
 
+    # Registry auth is not persisted in profile; handled during provisioning only
+
     return profile
 
 
@@ -357,6 +363,11 @@ async def apply_overrides_to_vm(
                     cfg['docker_compose_path'] = merged_profile.docker_compose_path
                 if merged_profile.start_docker_compose is not None:
                     cfg['start_docker_compose'] = merged_profile.start_docker_compose
+            if payload.docker_registry_url and payload.docker_registry_username and payload.docker_registry_password:
+                cfg['docker_registry_url'] = payload.docker_registry_url
+                cfg['docker_registry_username'] = payload.docker_registry_username
+                cfg['docker_registry_password'] = payload.docker_registry_password
+                cfg['install_docker'] = True
             if vm_network:
                 from app.api.provision import _yaml_network_from_vm_net
                 cfg['network_yaml'] = _yaml_network_from_vm_net(vm_network)

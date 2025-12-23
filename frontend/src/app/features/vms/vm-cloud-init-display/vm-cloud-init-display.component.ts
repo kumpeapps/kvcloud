@@ -129,6 +129,70 @@ interface CloudInitProfileListItem {
                 <div class="config-item">
                   <mat-checkbox [(ngModel)]="overrides.start_docker_compose">Start after provisioning</mat-checkbox>
                 </div>
+                <div class="config-item">
+                  <span class="config-label">Docker Registry URL</span>
+                  <input matInput [(ngModel)]="overrides.docker_registry_url" placeholder="registry.example.com">
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Docker Registry Username</span>
+                  <input matInput [(ngModel)]="overrides.docker_registry_username" placeholder="username">
+                </div>
+                <div class="config-item">
+                  <span class="config-label">Docker Registry Password</span>
+                  <input matInput type="password" [(ngModel)]="overrides.docker_registry_password" placeholder="password/token">
+                </div>
+              </div>
+
+              <!-- Multi Compose Files -->
+              <div class="config-grid">
+                <div class="config-item">
+                  <span class="config-label">Compose Files (agent)</span>
+                  <div *ngIf="composeFiles.length; else noCompose">
+                    <div class="compose-chip" *ngFor="let cf of composeFiles">
+                      <div>
+                        <strong>{{ cf.path }}</strong>
+                        <div class="compose-meta">Start on deploy: {{ cf.start_on_deploy ? 'Yes' : 'No' }} · Start on boot: {{ cf.start_on_boot ? 'Yes' : 'No' }}</div>
+                        <div class="compose-meta" *ngIf="cf.template_id">Template #{{ cf.template_id }}</div>
+                      </div>
+                      <button mat-stroked-button color="warn" (click)="removeCompose(cf)">Remove</button>
+                    </div>
+                  </div>
+                  <ng-template #noCompose>
+                    <div class="empty-section">No compose files added yet.</div>
+                  </ng-template>
+                </div>
+
+                <div class="config-item">
+                  <span class="config-label">Add Compose File</span>
+                  <input matInput [(ngModel)]="newCompose.path" placeholder="/root/docker-compose.yml">
+                  <textarea matInput rows="4" [(ngModel)]="newCompose.content" placeholder="version: '3'&#10;services:&#10;  web: ..."></textarea>
+                  <div style="display:flex; gap:12px; flex-wrap: wrap; align-items:center;">
+                    <mat-checkbox [(ngModel)]="newCompose.start_on_deploy">Start on deploy</mat-checkbox>
+                    <mat-checkbox [(ngModel)]="newCompose.start_on_boot">Start on boot</mat-checkbox>
+                    <mat-checkbox [(ngModel)]="newCompose.update_on_template_update">Auto-update from template</mat-checkbox>
+                  </div>
+                  <button mat-raised-button color="primary" (click)="addComposeFile()" [disabled]="!newCompose.content">Add Compose</button>
+                </div>
+
+                <div class="config-item">
+                  <span class="config-label">Add From Template</span>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Select template</mat-label>
+                    <mat-select [(ngModel)]="selectedTemplateId">
+                      <mat-option [value]="null">None</mat-option>
+                      <mat-option *ngFor="let tpl of composeTemplates" [value]="tpl.id">{{ tpl.name }}</mat-option>
+                    </mat-select>
+                  </mat-form-field>
+                  <textarea matInput rows="4" [(ngModel)]="templateVarsText" placeholder='{"project":"demo"}'>
+                  </textarea>
+                  <small>Provide JSON for template variables.</small>
+                  <div style="display:flex; gap:12px; flex-wrap: wrap; align-items:center;">
+                    <mat-checkbox [(ngModel)]="newCompose.start_on_deploy">Start on deploy</mat-checkbox>
+                    <mat-checkbox [(ngModel)]="newCompose.start_on_boot">Start on boot</mat-checkbox>
+                    <mat-checkbox [(ngModel)]="newCompose.update_on_template_update">Auto-update when template changes</mat-checkbox>
+                  </div>
+                  <button mat-stroked-button color="accent" (click)="addComposeFromTemplate()" [disabled]="!selectedTemplateId">Use Template</button>
+                </div>
               </div>
 
               <!-- Locale/Time -->
@@ -144,17 +208,40 @@ interface CloudInitProfileListItem {
               </div>
 
               <!-- Actions -->
-              <div style="display:flex; gap: 12px;">
+              <div style="display:flex; gap: 12px; align-items: center; flex-wrap: wrap;">
                 <button mat-raised-button color="primary" (click)="applyOverrides(true)" [disabled]="savingOverrides">
                   <mat-icon>save</mat-icon>
-                  Save & Redeploy (and Provision)
+                  Save
                 </button>
                 <button mat-stroked-button (click)="resetOverrides()" [disabled]="savingOverrides">Reset</button>
                 <button mat-stroked-button color="accent" (click)="retryProvision()" [disabled]="savingOverrides">
                   <mat-icon>replay</mat-icon>
                   Retry Provision via Guest Agent
                 </button>
+                <button mat-stroked-button color="primary" (click)="installAgent()" [disabled]="installingAgent">
+                  <mat-icon>cloud_download</mat-icon>
+                  {{ installingAgent ? 'Installing Agent...' : (agentInstalled ? 'Reinstall Agent' : 'Install Agent') }}
+                </button>
+                <span class="chip" [ngClass]="agentInstalled ? 'chip-generated' : 'chip'" *ngIf="agentInstalled !== null">
+                  <mat-icon style="vertical-align: middle; font-size:16px">{{ agentInstalled ? 'task_alt' : 'report_problem' }}</mat-icon>
+                  Agent: {{ agentInstalled ? 'Installed' : 'Not Installed' }}
+                  <span *ngIf="agentLastCheckin"> · Last check-in: {{ agentLastCheckin }}</span>
+                </span>
               </div>
+
+              <!-- Pending Provision Alert -->
+              <div *ngIf="pendingProvision" class="pending-provision-alert">
+                <mat-icon color="accent">schedule</mat-icon>
+                <div>
+                  <strong>Pending Provision Queued</strong>
+                  <p>The agent will execute provisioning on next check-in.</p>
+                  <details *ngIf="pendingProvisionConfig">
+                    <summary>View Configuration</summary>
+                    <pre>{{ pendingProvisionConfig | json }}</pre>
+                  </details>
+                </div>
+              </div>
+
               <div class="reboot-note">
                 <mat-icon>info</mat-icon>
                 <div>
@@ -382,6 +469,62 @@ interface CloudInitProfileListItem {
       font-size: 12px;
     }
 
+    .pending-provision-alert {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-top: 16px;
+      padding: 12px;
+      background: #fff3cd;
+      border-left: 4px solid #ff9800;
+      border-radius: 4px;
+    }
+
+    .pending-provision-alert strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .pending-provision-alert p {
+      margin: 4px 0;
+      font-size: 0.875rem;
+    }
+
+    .pending-provision-alert details {
+      margin-top: 8px;
+    }
+
+    .pending-provision-alert summary {
+      cursor: pointer;
+      font-size: 0.875rem;
+      color: #1976d2;
+    }
+
+    .pending-provision-alert pre {
+      margin-top: 8px;
+      padding: 8px;
+      background: #f5f5f5;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      overflow-x: auto;
+    }
+
+    .compose-chip {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 10px;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+
+    .compose-meta {
+      font-size: 12px;
+      color: #555;
+    }
+
     .chip {
       display: inline-block;
       padding: 2px 8px;
@@ -425,6 +568,9 @@ export class VmCloudInitDisplayComponent implements OnInit {
     docker_compose_content: '',
     docker_compose_path: '/root/docker-compose.yml',
     start_docker_compose: false,
+    docker_registry_url: '',
+    docker_registry_username: '',
+    docker_registry_password: '',
     timezone: '',
     locale: ''
   };
@@ -437,6 +583,29 @@ export class VmCloudInitDisplayComponent implements OnInit {
   profiles: CloudInitProfileListItem[] = [];
   selectedProfileId: number | null = null;
 
+  // Agent status
+  agentInstalled: boolean | null = null;
+  agentLastCheckin: string | null = null;
+  installingAgent: boolean = false;
+  agentStatusError: string | null = null;
+
+  // Pending provision status
+  pendingProvision: boolean = false;
+  pendingProvisionConfig: any = null;
+
+  // Compose templates/files
+  composeTemplates: any[] = [];
+  composeFiles: any[] = [];
+  newCompose: any = {
+    path: '/root/docker-compose.yml',
+    content: '',
+    start_on_deploy: false,
+    start_on_boot: false,
+    update_on_template_update: false
+  };
+  selectedTemplateId: number | null = null;
+  templateVarsText: string = '{}';
+
   constructor(
     private http: HttpClient,
     private snackBar: MatSnackBar
@@ -445,6 +614,10 @@ export class VmCloudInitDisplayComponent implements OnInit {
   ngOnInit(): void {
     this.loadConfig();
     this.loadProfiles();
+    this.loadAgentStatus();
+    this.loadPendingProvision();
+    this.loadComposeTemplates();
+    this.loadComposeFiles();
   }
 
   loadConfig(): void {
@@ -472,6 +645,21 @@ export class VmCloudInitDisplayComponent implements OnInit {
 
   refreshPreview(): void {
     this.loadConfig();
+  }
+
+  loadAgentStatus(): void {
+    const url = `${environment.apiUrl}/provision/agent/status/${this.vmid}`;
+    this.http.get<any>(url).subscribe({
+      next: (resp) => {
+        this.agentInstalled = !!resp?.agent_installed;
+        this.agentLastCheckin = resp?.last_checkin || null;
+      },
+      error: (err) => {
+        // Non-fatal; may be 404 if assignment not found
+        this.agentStatusError = err?.error?.detail || null;
+        this.agentInstalled = null;
+      }
+    });
   }
 
   loadProfiles(): void {
@@ -520,7 +708,7 @@ export class VmCloudInitDisplayComponent implements OnInit {
       node_id: this.nodeId,
       vmid: this.vmid,
       profile_id: this.selectedProfileId,
-      provision_via_guest_agent: withProvision,
+      provision_via_guest_agent: false,
       default_user: this.overrides.default_user || null,
       default_password: this.overrides.default_password || null,
       ssh_authorized_keys: sshKeys.length ? sshKeys : null,
@@ -532,6 +720,9 @@ export class VmCloudInitDisplayComponent implements OnInit {
       docker_compose_content: this.overrides.docker_compose_content || null,
       docker_compose_path: this.overrides.docker_compose_path || null,
       start_docker_compose: this.overrides.start_docker_compose,
+      docker_registry_url: this.overrides.docker_registry_url || null,
+      docker_registry_username: this.overrides.docker_registry_username || null,
+      docker_registry_password: this.overrides.docker_registry_password || null,
       timezone: this.overrides.timezone || null,
       locale: this.overrides.locale || null
     };
@@ -539,13 +730,18 @@ export class VmCloudInitDisplayComponent implements OnInit {
     const url = `${environment.apiUrl}/cloud-init/vm/${this.nodeId}/${this.vmid}/apply-overrides`;
     this.http.post(url, payload).subscribe({
       next: (resp: any) => {
-        const msg = withProvision ? 'Overrides applied and guest provisioning started.' : 'Overrides saved. Retry Provision to apply via guest agent.';
-        this.snackBar.open(msg, 'Close', { duration: 5000 });
-        if (resp?.provision_result) {
-          this.provisionResult = resp.provision_result;
+        const queueAgent = withProvision;
+        const finish = () => {
+          this.savingOverrides = false;
+          this.refreshPreview();
+        };
+
+        if (queueAgent) {
+          this.queueAgentProvision(true, finish);
+        } else {
+          this.snackBar.open('Overrides saved. Retry Provision to apply via agent.', 'Close', { duration: 5000 });
+          finish();
         }
-        this.savingOverrides = false;
-        this.refreshPreview();
       },
       error: (err) => {
         console.error('Error applying overrides:', err);
@@ -556,15 +752,16 @@ export class VmCloudInitDisplayComponent implements OnInit {
   }
 
   retryProvision(): void {
-    // Build payload from current overrides state
+    this.queueAgentProvision(false);
+  }
+
+  private buildAgentProvisionPayload(): any {
     const sshKeys = this.overrides_ssh_keys_text
       .split('\n')
       .map(k => k.trim())
       .filter(k => k.length > 0);
 
-    const payload: any = {
-      node_id: this.nodeId,
-      vmid: this.vmid,
+    return {
       default_user: this.overrides.default_user || null,
       default_password: this.overrides.default_password || null,
       ssh_authorized_keys: sshKeys.length ? sshKeys : null,
@@ -575,19 +772,46 @@ export class VmCloudInitDisplayComponent implements OnInit {
       docker_compose_content: this.overrides.docker_compose_content || null,
       docker_compose_path: this.overrides.docker_compose_path || null,
       start_docker_compose: this.overrides.start_docker_compose,
+      docker_registry_url: this.overrides.docker_registry_url || null,
+      docker_registry_username: this.overrides.docker_registry_username || null,
+      docker_registry_password: this.overrides.docker_registry_password || null,
       write_network: true,
     };
+  }
 
-    const url = `${environment.apiUrl}/provision/vm/guest-agent`;
+  private queueAgentProvision(fromSave: boolean, onDone?: () => void): void {
+    const payload = this.buildAgentProvisionPayload();
+    const url = `${environment.apiUrl}/vms/${this.nodeId}/${this.vmid}/queue-provision`;
     this.http.post(url, payload).subscribe({
-      next: (resp: any) => {
-        this.snackBar.open('Guest-agent provisioning executed.', 'Close', { duration: 4000 });
-        this.provisionResult = resp?.result || null;
+      next: () => {
+        const msg = fromSave ? 'Saved and queued for agent provisioning.' : 'Provisioning queued for agent to execute.';
+        this.snackBar.open(msg, 'Close', { duration: 4000 });
+        this.loadPendingProvision();
         this.refreshPreview();
+        if (onDone) onDone();
       },
       error: (err) => {
-        console.error('Error provisioning via agent:', err);
+        console.error('Error queueing provision:', err);
         this.snackBar.open(err?.error?.detail?.message || 'Provisioning failed', 'Close', { duration: 5000 });
+        if (onDone) onDone();
+      }
+    });
+  }
+
+  installAgent(): void {
+    this.installingAgent = true;
+    const url = `${environment.apiUrl}/provision/agent/install/${this.nodeId}/${this.vmid}`;
+    this.http.post<any>(url, {}).subscribe({
+      next: (resp) => {
+        this.snackBar.open('Agent installed successfully.', 'Close', { duration: 4000 });
+        this.installingAgent = false;
+        this.agentInstalled = true;
+        this.loadAgentStatus();
+      },
+      error: (err) => {
+        console.error('Error installing agent:', err);
+        this.snackBar.open(err?.error?.detail || 'Agent installation failed', 'Close', { duration: 5000 });
+        this.installingAgent = false;
       }
     });
   }
@@ -604,6 +828,9 @@ export class VmCloudInitDisplayComponent implements OnInit {
       docker_compose_content: '',
       docker_compose_path: '/root/docker-compose.yml',
       start_docker_compose: false,
+      docker_registry_url: '',
+      docker_registry_username: '',
+      docker_registry_password: '',
       timezone: '',
       locale: ''
     };
@@ -644,11 +871,135 @@ export class VmCloudInitDisplayComponent implements OnInit {
     if (typeof overrides.start_docker_compose === 'boolean') {
       this.overrides.start_docker_compose = overrides.start_docker_compose;
     }
+    if (overrides.docker_registry_url) {
+      this.overrides.docker_registry_url = overrides.docker_registry_url;
+    }
+    if (overrides.docker_registry_username) {
+      this.overrides.docker_registry_username = overrides.docker_registry_username;
+    }
+    if (overrides.docker_registry_password) {
+      this.overrides.docker_registry_password = overrides.docker_registry_password;
+    }
     if (overrides.timezone) {
       this.overrides.timezone = overrides.timezone;
     }
     if (overrides.locale) {
       this.overrides.locale = overrides.locale;
     }
+  }
+
+  loadComposeTemplates(): void {
+    this.http.get<any[]>(`${environment.apiUrl}/vms/compose-templates`).subscribe({
+      next: (resp: any) => {
+        this.composeTemplates = resp || [];
+      },
+      error: (err) => {
+        console.error('Failed to load compose templates', err);
+      }
+    });
+  }
+
+  loadComposeFiles(): void {
+    const url = `${environment.apiUrl}/vms/${this.nodeId}/${this.vmid}/compose-files`;
+    this.http.get<any[]>(url).subscribe({
+      next: (resp) => {
+        this.composeFiles = resp || [];
+      },
+      error: (err) => {
+        console.error('Failed to load compose files', err);
+      }
+    });
+  }
+
+  addComposeFile(): void {
+    const url = `${environment.apiUrl}/vms/${this.nodeId}/${this.vmid}/compose-files`;
+    this.http.post<any>(url, this.newCompose).subscribe({
+      next: () => {
+        this.snackBar.open('Compose file added', 'Close', { duration: 3000 });
+        this.loadComposeFiles();
+        this.loadPendingProvision();
+        this.newCompose = {
+          path: '/root/docker-compose.yml',
+          content: '',
+          start_on_deploy: false,
+          start_on_boot: false,
+          update_on_template_update: false
+        };
+      },
+      error: (err) => {
+        console.error('Failed to add compose file', err);
+        this.snackBar.open(err?.error?.detail || 'Failed to add compose', 'Close', { duration: 4000 });
+      }
+    });
+  }
+
+  private parseTemplateVars(): any {
+    try {
+      return this.templateVarsText ? JSON.parse(this.templateVarsText) : {};
+    } catch (e) {
+      this.snackBar.open('Invalid JSON for template variables', 'Close', { duration: 4000 });
+      return null;
+    }
+  }
+
+  addComposeFromTemplate(): void {
+    if (!this.selectedTemplateId) {
+      this.snackBar.open('Select a template first', 'Close', { duration: 3000 });
+      return;
+    }
+    const vars = this.parseTemplateVars();
+    if (vars === null) return;
+    const url = `${environment.apiUrl}/vms/${this.nodeId}/${this.vmid}/compose-from-template`;
+    const payload = {
+      template_id: this.selectedTemplateId,
+      variables: vars,
+      path: this.newCompose.path,
+      start_on_deploy: this.newCompose.start_on_deploy,
+      start_on_boot: this.newCompose.start_on_boot,
+      update_on_template_update: this.newCompose.update_on_template_update
+    };
+    this.http.post<any>(url, payload).subscribe({
+      next: () => {
+        this.snackBar.open('Compose added from template', 'Close', { duration: 3000 });
+        this.loadComposeFiles();
+        this.loadPendingProvision();
+      },
+      error: (err) => {
+        console.error('Failed to add from template', err);
+        this.snackBar.open(err?.error?.detail || 'Failed to add from template', 'Close', { duration: 4000 });
+      }
+    });
+  }
+
+  removeCompose(entry: any): void {
+    if (!entry?.id) {
+      this.snackBar.open('Missing compose id; refresh and try again', 'Close', { duration: 3000 });
+      return;
+    }
+    const url = `${environment.apiUrl}/vms/${this.nodeId}/${this.vmid}/compose-files/${entry.id}`;
+    this.http.delete<any>(url).subscribe({
+      next: () => {
+        this.snackBar.open('Compose removed', 'Close', { duration: 3000 });
+        this.loadComposeFiles();
+        this.loadPendingProvision();
+      },
+      error: (err) => {
+        console.error('Failed to remove compose', err);
+        this.snackBar.open(err?.error?.detail || 'Failed to remove compose', 'Close', { duration: 4000 });
+      }
+    });
+  }
+
+  loadPendingProvision(): void {
+    const url = `${environment.apiUrl}/vms/${this.nodeId}/${this.vmid}/pending-provision`;
+    this.http.get<any>(url).subscribe({
+      next: (resp) => {
+        this.pendingProvision = resp.provision_pending || false;
+        this.pendingProvisionConfig = resp.pending_config || null;
+      },
+      error: (err) => {
+        console.error('Error loading pending provision:', err);
+      }
+    });
   }
 }

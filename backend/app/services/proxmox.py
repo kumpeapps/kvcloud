@@ -1,5 +1,6 @@
 """Proxmox service for cluster and VM management."""
 from typing import List, Optional, Dict, Any, Tuple
+import os
 from proxmoxer import ProxmoxAPI
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -141,6 +142,17 @@ class ProxmoxService:
         except Exception as e:
             return (1, None, f'Guest agent exec error: {e}')
 
+    async def exec_guest_command(self, node_id: int, vmid: int, command: str, timeout: int = 120) -> Tuple[int, Optional[str], Optional[str]]:
+        """Compatibility wrapper used by API routes to execute guest commands.
+
+        Delegates to guest_agent_exec and returns (exitcode, stdout, stderr).
+        """
+        code, out, err = await self.guest_agent_exec(node_id, vmid, command, timeout=timeout)
+        # Minimal logging on failure to aid debugging without being verbose
+        if code != 0:
+            print(f"[GuestAgent] exec failed on VM {vmid}: code={code}, err={err}")
+        return (code, out, err)
+
     async def guest_write_file(self, node_id: int, vmid: int, path: str, content: str, mode: str = '0644', owner: str = 'root:root') -> bool:
         """Write a file inside the guest using base64 encoding via exec.
 
@@ -260,6 +272,10 @@ class ProxmoxService:
             result["steps"].append({"step": "apt_install", "status": "ok" if code == 0 else "error", "detail": err or out})
             print(f"[Provision] apt install result: code={code}")
 
+        # If registry credentials provided, ensure docker installation
+        if (config.get('docker_registry_url') and config.get('docker_registry_username') and config.get('docker_registry_password')) and not config.get('install_docker'):
+            config['install_docker'] = True
+
         # Docker (install & repo setup)
         if config.get('install_docker'):
             print(f"[Provision] Installing Docker with official repo...")
@@ -286,21 +302,44 @@ class ProxmoxService:
             result["steps"].append({"step": "docker_install", "status": "ok" if code == 0 else "error", "detail": err or out})
             print(f"[Provision] Docker install result: code={code}")
 
+        # Docker registry auth (logout then login if provided)
+        if config.get('docker_registry_url') and config.get('docker_registry_username') and config.get('docker_registry_password'):
+            reg_url = config.get('docker_registry_url')
+            reg_user = config.get('docker_registry_username')
+            reg_pass = (config.get('docker_registry_password') or "").replace("'", "'\"'\"'")
+            print(f"[Provision] Authenticating docker registry {reg_url}...")
+            # Logout previous session for that registry (ignore failure)
+            await self.guest_agent_exec(node_id, vmid, f"docker logout {reg_url} || true", timeout=60)
+            login_cmd = f"echo '{reg_pass}' | docker login {reg_url} -u '{reg_user}' --password-stdin"
+            code, out, err = await self.guest_agent_exec(node_id, vmid, login_cmd, timeout=120)
+            result["steps"].append({"step": "docker_login", "status": "ok" if code == 0 else "error", "detail": err or out})
+            print(f"[Provision] Docker login result: code={code}")
+
         # Docker compose (supports multiple files)
         compose_entries = []
         if config.get('docker_compose_files'):
-            compose_entries.extend(config['docker_compose_files'])
+            for entry in config['docker_compose_files']:
+                normalized = dict(entry)
+                if 'start' not in normalized:
+                    normalized['start'] = bool(entry.get('start_on_deploy'))
+                normalized['start_on_boot'] = bool(entry.get('start_on_boot'))
+                compose_entries.append(normalized)
         if config.get('docker_compose_content'):
             compose_entries.append({
                 "content": config['docker_compose_content'],
                 "path": config.get('docker_compose_path') or '/root/docker-compose.yml',
-                "start": bool(config.get('start_docker_compose'))
+                "start": bool(config.get('start_docker_compose')),
+                "start_on_boot": False
             })
+
+        if compose_entries and not config.get('install_docker'):
+            config['install_docker'] = True
 
         for entry in compose_entries:
             content = entry.get('content')
             path = entry.get('path') or '/root/docker-compose.yml'
             start = bool(entry.get('start'))
+            start_on_boot = bool(entry.get('start_on_boot'))
             if not content:
                 continue
             print(f"[Provision] Writing docker-compose to {path}...")
@@ -314,6 +353,45 @@ class ProxmoxService:
                 code, out, err = await self.guest_agent_exec(node_id, vmid, f"cd '{dir_path}' && (docker compose up -d || docker-compose up -d)", timeout=300)
                 result["steps"].append({"step": f"compose_up:{path}", "status": "ok" if code == 0 else "error", "detail": err or out})
                 print(f"[Provision] Docker compose up result: code={code}")
+
+            if start_on_boot:
+                dir_path = path.rsplit('/', 1)[0]
+                service_name = f"kvcloud-compose-{os.path.basename(path).replace('.', '-')}"
+                service_path = f"/etc/systemd/system/{service_name}.service"
+                unit_content = (
+                    "[Unit]\n"
+                    f"Description=KVCloud Compose {path}\n"
+                    "Requires=docker.service\n"
+                    "After=docker.service network-online.target\n\n"
+                    "[Service]\n"
+                    "Type=oneshot\n"
+                    "RemainAfterExit=yes\n"
+                    f"WorkingDirectory={dir_path}\n"
+                    f"ExecStart=/usr/bin/env sh -c 'docker compose -f {path} up -d || docker-compose -f {path} up -d'\n"
+                    f"ExecStop=/usr/bin/env sh -c 'docker compose -f {path} down || docker-compose -f {path} down'\n"
+                    "TimeoutStartSec=300\n"
+                    "TimeoutStopSec=120\n\n"
+                    "[Install]\n"
+                    "WantedBy=multi-user.target\n"
+                )
+                print(f"[Provision] Installing compose systemd unit {service_name}...")
+                ok_unit = await self.guest_write_file(node_id, vmid, service_path, unit_content, mode='0644', owner='root:root')
+                result["steps"].append({"step": f"compose_unit:{service_name}", "status": "ok" if ok_unit else "error"})
+                if ok_unit:
+                    code, out, err = await self.guest_agent_exec(node_id, vmid, "systemctl daemon-reload", timeout=60)
+                    result["steps"].append({"step": f"daemon_reload:{service_name}", "status": "ok" if code == 0 else "warning", "detail": err or out})
+                    code, out, err = await self.guest_agent_exec(node_id, vmid, f"systemctl enable --now {service_name}", timeout=120)
+                    result["steps"].append({"step": f"compose_enable:{service_name}", "status": "ok" if code == 0 else "error", "detail": err or out})
+
+        # Expand disk/filesystem (in case disk was resized)
+        print(f"[Provision] Expanding disk/filesystem if needed...")
+        code, out, err = await self.guest_agent_exec(node_id, vmid, "growpart /dev/sda 1 2>/dev/null || growpart /dev/vda 1 2>/dev/null || true", timeout=60)
+        result["steps"].append({"step": "growpart", "status": "ok", "detail": out or "Partition expansion attempted"})
+        print(f"[Provision] Growpart result: code={code}, out={out}")
+        
+        code, out, err = await self.guest_agent_exec(node_id, vmid, "resize2fs /dev/sda1 2>/dev/null || resize2fs /dev/vda1 2>/dev/null || xfs_growfs / 2>/dev/null || true", timeout=60)
+        result["steps"].append({"step": "resize_fs", "status": "ok", "detail": out or "Filesystem resize attempted"})
+        print(f"[Provision] Resize filesystem result: code={code}, out={out}")
 
         # Network (netplan)
         if config.get('network_yaml'):
@@ -1030,24 +1108,33 @@ class ProxmoxService:
         Returns:
             True if successful
         """
+        # v2 - Direct implementation without reboot wait
+        import asyncio
+        
         node = await self.get_node(node_id)
         if not node:
             raise Exception("Node not found")
         
-        try:
-            proxmox = self._get_proxmox_connection(node)
-            node_name = self._get_proxmox_node_name(node)
-            
-            # Resize disk
-            result = proxmox.nodes(node_name).qemu(vmid).resize.put(
-                disk=disk_id,
-                size=size_increment
-            )
-            
-            return True
-        except Exception as e:
-            print(f"Error resizing VM disk: {e}")
-            raise
+        proxmox = self._get_proxmox_connection(node)
+        node_name = self._get_proxmox_node_name(node)
+        
+        # Get VM status before resize
+        vm_status_before = proxmox.nodes(node_name).qemu(vmid).status.current.get()
+        
+        # Resize disk
+        proxmox.nodes(node_name).qemu(vmid).resize.put(
+            disk=disk_id,
+            size=size_increment
+        )
+        
+        # If VM is running, reboot it so the guest OS detects the new size
+        if vm_status_before.get('status') == 'running':
+            try:
+                proxmox.nodes(node_name).qemu(vmid).status.reboot.post()
+            except Exception:
+                pass
+        
+        return True
     
     async def delete_vm_disk(self, node_id: int, vmid: int, disk_id: str) -> bool:
         """Delete a disk from a VM.
@@ -1299,7 +1386,7 @@ class ProxmoxService:
             # Add storage configuration
             storage = vm_config.get('storage', 'local-lvm')
             disk_size = vm_config.get('disk_size', 32)
-            config['scsi0'] = f"{storage}:{disk_size}"
+            config['scsi0'] = f"{storage}:{disk_size}G"  # Add G suffix for gigabytes
             
             # Add ISO if specified
             if vm_config.get('iso'):
@@ -1312,6 +1399,50 @@ class ProxmoxService:
                     newid=vm_config['vmid'],
                     name=vm_config['name']
                 )
+                # After cloning, resize the disk to requested size if different from template
+                try:
+                    # Get the cloned VM's current disk configuration
+                    vm_info = proxmox.nodes(node_name).qemu(vm_config['vmid']).config.get()
+                    print(f"Cloned VM config: {vm_info}")
+                    
+                    # Check if resize is needed
+                    current_disk = vm_info.get('scsi0', '')
+                    print(f"Current disk config: {current_disk}")
+                    
+                    # Resize scsi0 to the requested size
+                    # Proxmox resize uses incremental size with +size format
+                    print(f"Attempting to resize disk to {disk_size}G...")
+                    proxmox.nodes(node_name).qemu(vm_config['vmid']).resize.put(
+                        disk='scsi0',
+                        size=f"+{disk_size}G"
+                    )
+                    print(f"Resized cloned VM disk by +{disk_size}G")
+                    
+                    # After resize, we need to reboot the VM if it's running
+                    # For a freshly cloned VM, it's usually stopped, so we can skip this
+                    vm_status = proxmox.nodes(node_name).qemu(vm_config['vmid']).status.current.get()
+                    print(f"VM status after resize: {vm_status.get('status')}")
+                    
+                    if vm_status.get('status') == 'running':
+                        # Shutdown and start the VM so Proxmox detects the new disk size
+                        print(f"Shutting down running VM {vm_config['vmid']} to apply disk resize...")
+                        try:
+                            proxmox.nodes(node_name).qemu(vm_config['vmid']).status.shutdown.post()
+                            # Wait for VM to stop (max 60 seconds)
+                            import time
+                            for i in range(60):
+                                time.sleep(1)
+                                status = proxmox.nodes(node_name).qemu(vm_config['vmid']).status.current.get()
+                                if status.get('status') == 'stopped':
+                                    break
+                            print(f"Starting VM {vm_config['vmid']}...")
+                            proxmox.nodes(node_name).qemu(vm_config['vmid']).status.start.post()
+                        except Exception as shutdown_err:
+                            print(f"Warning: Could not shutdown/start VM after resize: {shutdown_err}")
+                except Exception as e:
+                    print(f"Warning: Could not resize cloned disk: {e}")
+                    import traceback
+                    traceback.print_exc()
             else:
                 # Create new VM from scratch
                 result = proxmox.nodes(node_name).qemu.post(**config)
@@ -1941,23 +2072,6 @@ class ProxmoxService:
         except Exception as e:
             print(f"Error adding VM disk: {e}")
             raise Exception(f"Failed to add VM disk: {str(e)}")
-    
-    async def resize_vm_disk(self, node_id: int, vmid: int, disk: str, size: str) -> None:
-        """Resize a VM disk (can only increase size)."""
-        node = await self.get_node(node_id)
-        if not node:
-            raise Exception("Node not found")
-        
-        try:
-            proxmox = self._get_proxmox_connection(node)
-            node_name = self._get_proxmox_node_name(node)
-            
-            # Resize the disk
-            proxmox.nodes(node_name).qemu(vmid).resize.put(disk=disk, size=size)
-            
-        except Exception as e:
-            print(f"Error resizing VM disk: {e}")
-            raise Exception(f"Failed to resize VM disk: {str(e)}")
     
     async def delete_vm_disk(self, node_id: int, vmid: int, disk: str) -> None:
         """Delete/detach a disk from a VM."""

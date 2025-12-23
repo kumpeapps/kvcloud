@@ -15,6 +15,7 @@ services:
       - INITIAL_ADMIN_EMAIL=admin@kvcloud.local
       - INITIAL_ADMIN_PASSWORD=changeme
       - INITIAL_ADMIN_FULL_NAME=Administrator
+      - API_URL=http://localhost:8000
     volumes:
       - ./backend:/app
     depends_on:
@@ -30,6 +31,8 @@ services:
     container_name: kvcloud-frontend
     ports:
       - "80:80"
+    environment:
+      - API_URL=http://localhost:8000
     depends_on:
       - backend
     networks:
