@@ -349,14 +349,16 @@ class ProxmoxService:
             
             if start:
                 dir_path = path.rsplit('/', 1)[0]
+                filename = path.rsplit('/', 1)[1] if '/' in path else path
                 print(f"[Provision] Starting docker compose at {dir_path}...")
-                code, out, err = await self.guest_agent_exec(node_id, vmid, f"cd '{dir_path}' && (docker compose up -d || docker-compose up -d)", timeout=300)
+                code, out, err = await self.guest_agent_exec(node_id, vmid, f"cd '{dir_path}' && (docker compose -f {filename} up -d || docker-compose -f {filename} up -d)", timeout=300)
                 result["steps"].append({"step": f"compose_up:{path}", "status": "ok" if code == 0 else "error", "detail": err or out})
                 print(f"[Provision] Docker compose up result: code={code}")
 
             if start_on_boot:
                 dir_path = path.rsplit('/', 1)[0]
-                service_name = f"kvcloud-compose-{os.path.basename(path).replace('.', '-')}"
+                # Use service_name from entry if provided, otherwise generate from filename
+                service_name = entry.get('service_name') or f"kvcloud-compose-{os.path.basename(path).replace('.', '-')}"
                 service_path = f"/etc/systemd/system/{service_name}.service"
                 unit_content = (
                     "[Unit]\n"

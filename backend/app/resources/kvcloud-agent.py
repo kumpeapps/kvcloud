@@ -138,8 +138,14 @@ def execute_provision(provision_data):
     config = provision_data.get('config', {})
     state = load_state()
     registry_state = state.get('docker_registry', {}) if isinstance(state, dict) else {}
+    compose_services = {}
     
     logger.info(f"Starting provision {provision_id}")
+    logger.info(f"Config keys: {list(config.keys())}")
+    if config.get('docker_compose_files'):
+        logger.info(f"Found {len(config['docker_compose_files'])} docker compose files")
+        for cf in config['docker_compose_files']:
+            logger.info(f"  - {cf.get('path')} (start_on_deploy: {cf.get('start_on_deploy')}, start_on_boot: {cf.get('start_on_boot')})")
     
     results = []
     failed_steps = []
@@ -256,13 +262,20 @@ def execute_provision(provision_data):
 
     # 5. Install Docker if requested
     if config.get('install_docker'):
-        success, output = execute_command(
-            "curl -fsSL https://get.docker.com | sh",
-            "Installing Docker"
-        )
-        results.append({'step': 'docker', 'success': success, 'output': output})
-        if not success:
-            failed_steps.append('docker')
+        # Check if Docker is already installed
+        docker_check, _ = execute_command("which docker", "Checking if Docker is installed")
+        
+        if docker_check:
+            logger.info("Docker is already installed, skipping installation")
+            results.append({'step': 'docker', 'success': True, 'output': 'Docker already installed'})
+        else:
+            success, output = execute_command(
+                "curl -fsSL https://get.docker.com | sh",
+                "Installing Docker"
+            )
+            results.append({'step': 'docker', 'success': success, 'output': output})
+            if not success:
+                failed_steps.append('docker')
         
         # Add user to docker group
         if config.get('default_user'):
@@ -298,62 +311,114 @@ def execute_provision(provision_data):
     
     # 6. Docker Compose files
     if config.get('docker_compose_files'):
-        # Ensure docker install requested when compose entries exist
+        logger.info(f"Processing {len(config['docker_compose_files'])} docker compose files")
+
         if not config.get('install_docker'):
             config['install_docker'] = True
+        try:
+            if isinstance(state, dict) and isinstance(state.get('compose_services'), dict):
+                compose_services = dict(state.get('compose_services'))
+        except Exception:
+            compose_services = {}
 
+        desired_services = {}
+        for compose in config['docker_compose_files']:
+            path = compose.get('path', '/root/docker-compose.yml')
+            cid = compose.get('id') or f"path:{path}"
+            svc_name = compose.get('service_name') or f"kvcloud-compose-{os.path.basename(path).replace('.', '-')}"
+            if compose.get('start_on_boot'):
+                desired_services[cid] = {
+                    'service_name': svc_name,
+                    'unit_path': f"/etc/systemd/system/{svc_name}.service"
+                }
+
+        # Remove obsolete/renamed services
+        for cid, info in list(compose_services.items()):
+            old_svc = info.get('service_name')
+            if (cid not in desired_services) or (desired_services[cid]['service_name'] != old_svc):
+                if old_svc:
+                    execute_command(f"systemctl disable --now {old_svc} || true", f"Disable old compose service {old_svc}")
+                    execute_command(f"rm -f /etc/systemd/system/{old_svc}.service", f"Remove old unit {old_svc}")
+                    execute_command("systemctl daemon-reload", "Reload systemd after removal")
+                compose_services.pop(cid, None)
+
+        # Process compose entries
         for compose in config['docker_compose_files']:
             path = compose.get('path', '/root/docker-compose.yml')
             content = compose.get('content', '')
             start_flag = compose.get('start') or compose.get('start_on_deploy') or False
             start_on_boot = bool(compose.get('start_on_boot'))
-            
-            try:
-                os.makedirs(os.path.dirname(path), exist_ok=True)
-                with open(path, 'w') as f:
-                    f.write(content)
-                
-                if start_flag:
-                    success, output = execute_command(
-                        f"cd {os.path.dirname(path)} && (docker compose -f {path} up -d || docker-compose -f {path} up -d)",
-                        f"Starting docker-compose: {path}"
-                    )
-                    results.append({'step': f'docker-compose-{path}', 'success': success, 'output': output})
-                    if not success:
-                        failed_steps.append(f'docker-compose-{path}')
-                else:
-                    results.append({'step': f'docker-compose-{path}', 'success': True, 'output': 'File written'})
+            logger.info(f"Processing compose file: {path} (start_flag: {start_flag}, start_on_boot: {start_on_boot})")
 
-                if start_on_boot:
-                    service_name = f"kvcloud-compose-{os.path.basename(path).replace('.', '-')}"
-                    service_path = f"/etc/systemd/system/{service_name}.service"
-                    compose_dir = os.path.dirname(path) or "/root"
-                    unit = f"""
-[Unit]
-Description=KVCloud Compose {path}
-Requires=docker.service
-After=docker.service network-online.target
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, 'w') as f:
+                f.write(content)
+            logger.info(f"Wrote docker-compose file to {path}")
 
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-WorkingDirectory={compose_dir}
-ExecStart=/usr/bin/env sh -c 'docker compose -f {path} up -d || docker-compose -f {path} up -d'
-ExecStop=/usr/bin/env sh -c 'docker compose -f {path} down || docker-compose -f {path} down'
-TimeoutStartSec=300
-TimeoutStopSec=120
+            if start_flag:
+                execute_command("systemctl is-active docker || systemctl start docker", "Ensure docker is running")
+                compose_dir = os.path.dirname(path) or "/root"
+                compose_file = os.path.basename(path)
+                success, output = execute_command(
+                    f"cd '{compose_dir}' && docker compose -f {compose_file} up -d || docker-compose -f {compose_file} up -d",
+                    f"Starting docker-compose: {path}"
+                )
+                results.append({'step': f'docker-compose-{path}', 'success': success, 'output': output})
+                if not success:
+                    failed_steps.append(f'docker-compose-{path}')
+            else:
+                results.append({'step': f'docker-compose-{path}', 'success': True, 'output': 'File written'})
 
-[Install]
-WantedBy=multi-user.target
-""".strip()
+            if start_on_boot:
+                service_name = compose.get('service_name') or f"kvcloud-compose-{os.path.basename(path).replace('.', '-')}"
+                service_path = f"/etc/systemd/system/{service_name}.service"
+                compose_dir = os.path.dirname(path) or "/root"
+                unit = (
+                    "[Unit]\n"
+                    f"Description=KVCloud Compose {path}\n"
+                    "Requires=docker.service\n"
+                    "After=docker.service network-online.target\n\n"
+                    "[Service]\n"
+                    "Type=oneshot\n"
+                    "RemainAfterExit=yes\n"
+                    f"WorkingDirectory={compose_dir}\n"
+                    f"ExecStart=/usr/bin/env sh -c 'docker compose -f {path} up -d || docker-compose -f {path} up -d'\n"
+                    f"ExecStop=/usr/bin/env sh -c 'docker compose -f {path} down || docker-compose -f {path} down'\n"
+                    "TimeoutStartSec=300\n"
+                    "TimeoutStopSec=120\n\n"
+                    "[Install]\n"
+                    "WantedBy=multi-user.target\n"
+                )
+
+                try:
                     with open(service_path, 'w') as f:
                         f.write(unit)
-                    execute_command("systemctl daemon-reload", f"Reload systemd for {service_name}")
-                    execute_command(f"systemctl enable --now {service_name}", f"Enable compose service {service_name}")
+                    logger.info(f"Wrote systemd unit to {service_path}")
+
+                    success, output = execute_command("systemctl daemon-reload", f"Reload systemd for {service_name}")
+                    results.append({'step': f'systemd-reload-{service_name}', 'success': success, 'output': output})
+
+                    success, output = execute_command(f"systemctl enable --now {service_name}", f"Enable compose service {service_name}")
+                    results.append({'step': f'systemd-enable-{service_name}', 'success': success, 'output': output})
+
+                    if not success:
+                        failed_steps.append(f'systemd-enable-{service_name}')
+                        logger.error(f"Failed to enable systemd service: {output}")
+                    else:
+                        cid = compose.get('id') or f"path:{path}"
+                        compose_services[cid] = {'service_name': service_name}
+                except Exception as e:
+                    logger.error(f"Failed to create systemd unit: {e}")
+                    results.append({'step': f'systemd-unit-{service_name}', 'success': False, 'output': str(e)})
+                    failed_steps.append(f'systemd-unit-{service_name}')
+
+        # Persist updated compose services mapping
+        if isinstance(state, dict):
+            try:
+                state['compose_services'] = compose_services
+                save_state(state)
             except Exception as e:
-                logger.error(f"Failed to write docker-compose file: {e}")
-                results.append({'step': f'docker-compose-{path}', 'success': False, 'output': str(e)})
-                failed_steps.append(f'docker-compose-{path}')
+                logger.error(f"Failed to persist compose_services state: {e}")
     
     # 7. Set timezone
     if config.get('timezone'):

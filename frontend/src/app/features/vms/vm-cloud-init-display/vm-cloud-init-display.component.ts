@@ -2,6 +2,8 @@ import { Component, OnInit, Input, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MaterialModule } from '../../../shared/material.module';
+import { MatDialog } from '@angular/material/dialog';
+import { VmComposeEditDialogComponent } from './vm-compose-edit-dialog.component';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../../environments/environment';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -150,10 +152,12 @@ interface CloudInitProfileListItem {
                   <div *ngIf="composeFiles.length; else noCompose">
                     <div class="compose-chip" *ngFor="let cf of composeFiles">
                       <div>
-                        <strong>{{ cf.path }}</strong>
+                        <strong>{{ cf.service_name || 'unnamed' }}</strong>
+                        <div class="compose-meta">{{ cf.path }}</div>
                         <div class="compose-meta">Start on deploy: {{ cf.start_on_deploy ? 'Yes' : 'No' }} · Start on boot: {{ cf.start_on_boot ? 'Yes' : 'No' }}</div>
                         <div class="compose-meta" *ngIf="cf.template_id">Template #{{ cf.template_id }}</div>
                       </div>
+                      <button mat-stroked-button color="primary" (click)="editCompose(cf)">Edit</button>
                       <button mat-stroked-button color="warn" (click)="removeCompose(cf)">Remove</button>
                     </div>
                   </div>
@@ -165,13 +169,14 @@ interface CloudInitProfileListItem {
                 <div class="config-item">
                   <span class="config-label">Add Compose File</span>
                   <input matInput [(ngModel)]="newCompose.path" placeholder="/root/docker-compose.yml">
+                  <input matInput [(ngModel)]="newCompose.service_name" placeholder="Service name (required for boot startup)" required>
                   <textarea matInput rows="4" [(ngModel)]="newCompose.content" placeholder="version: '3'&#10;services:&#10;  web: ..."></textarea>
                   <div style="display:flex; gap:12px; flex-wrap: wrap; align-items:center;">
                     <mat-checkbox [(ngModel)]="newCompose.start_on_deploy">Start on deploy</mat-checkbox>
                     <mat-checkbox [(ngModel)]="newCompose.start_on_boot">Start on boot</mat-checkbox>
                     <mat-checkbox [(ngModel)]="newCompose.update_on_template_update">Auto-update from template</mat-checkbox>
                   </div>
-                  <button mat-raised-button color="primary" (click)="addComposeFile()" [disabled]="!newCompose.content">Add Compose</button>
+                  <button mat-raised-button color="primary" (click)="addComposeFile()" [disabled]="!newCompose.content || !newCompose.service_name">Add Compose</button>
                 </div>
 
                 <div class="config-item">
@@ -183,6 +188,10 @@ interface CloudInitProfileListItem {
                       <mat-option *ngFor="let tpl of composeTemplates" [value]="tpl.id">{{ tpl.name }}</mat-option>
                     </mat-select>
                   </mat-form-field>
+                  <mat-form-field appearance="outline" class="full-width">
+                    <mat-label>Service name</mat-label>
+                    <input matInput [(ngModel)]="newCompose.service_name" placeholder="e.g. web, api" required>
+                  </mat-form-field>
                   <textarea matInput rows="4" [(ngModel)]="templateVarsText" placeholder='{"project":"demo"}'>
                   </textarea>
                   <small>Provide JSON for template variables.</small>
@@ -191,7 +200,7 @@ interface CloudInitProfileListItem {
                     <mat-checkbox [(ngModel)]="newCompose.start_on_boot">Start on boot</mat-checkbox>
                     <mat-checkbox [(ngModel)]="newCompose.update_on_template_update">Auto-update when template changes</mat-checkbox>
                   </div>
-                  <button mat-stroked-button color="accent" (click)="addComposeFromTemplate()" [disabled]="!selectedTemplateId">Use Template</button>
+                  <button mat-stroked-button color="accent" (click)="addComposeFromTemplate()" [disabled]="!selectedTemplateId || !newCompose.service_name">Use Template</button>
                 </div>
               </div>
 
@@ -598,6 +607,7 @@ export class VmCloudInitDisplayComponent implements OnInit {
   composeFiles: any[] = [];
   newCompose: any = {
     path: '/root/docker-compose.yml',
+    service_name: '',
     content: '',
     start_on_deploy: false,
     start_on_boot: false,
@@ -608,7 +618,8 @@ export class VmCloudInitDisplayComponent implements OnInit {
 
   constructor(
     private http: HttpClient,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private dialog: MatDialog
   ) {}
 
   ngOnInit(): void {
@@ -920,6 +931,7 @@ export class VmCloudInitDisplayComponent implements OnInit {
         this.loadPendingProvision();
         this.newCompose = {
           path: '/root/docker-compose.yml',
+          service_name: '',
           content: '',
           start_on_deploy: false,
           start_on_boot: false,
@@ -947,6 +959,10 @@ export class VmCloudInitDisplayComponent implements OnInit {
       this.snackBar.open('Select a template first', 'Close', { duration: 3000 });
       return;
     }
+    if (!this.newCompose.service_name) {
+      this.snackBar.open('Service name is required', 'Close', { duration: 3000 });
+      return;
+    }
     const vars = this.parseTemplateVars();
     if (vars === null) return;
     const url = `${environment.apiUrl}/vms/${this.nodeId}/${this.vmid}/compose-from-template`;
@@ -954,6 +970,7 @@ export class VmCloudInitDisplayComponent implements OnInit {
       template_id: this.selectedTemplateId,
       variables: vars,
       path: this.newCompose.path,
+      service_name: this.newCompose.service_name,
       start_on_deploy: this.newCompose.start_on_deploy,
       start_on_boot: this.newCompose.start_on_boot,
       update_on_template_update: this.newCompose.update_on_template_update
@@ -987,6 +1004,48 @@ export class VmCloudInitDisplayComponent implements OnInit {
         console.error('Failed to remove compose', err);
         this.snackBar.open(err?.error?.detail || 'Failed to remove compose', 'Close', { duration: 4000 });
       }
+    });
+  }
+
+  editCompose(entry: any): void {
+    if (!entry?.id) {
+      this.snackBar.open('Missing compose id; refresh and try again', 'Close', { duration: 3000 });
+      return;
+    }
+    const dialogRef = this.dialog.open(VmComposeEditDialogComponent, {
+      width: '800px',
+      data: {
+        id: entry.id,
+        path: entry.path,
+        service_name: entry.service_name || '',
+        content: entry.content,
+        start_on_deploy: !!entry.start_on_deploy,
+        start_on_boot: !!entry.start_on_boot,
+        update_on_template_update: !!entry.update_on_template_update
+      }
+    });
+    dialogRef.afterClosed().subscribe(result => {
+      if (!result) return; // cancelled
+      const url = `${environment.apiUrl}/vms/${this.nodeId}/${this.vmid}/compose-files/${entry.id}`;
+      const updateData = {
+        path: result.path,
+        service_name: result.service_name,
+        content: result.content,
+        start_on_deploy: !!result.start_on_deploy,
+        start_on_boot: !!result.start_on_boot,
+        update_on_template_update: !!result.update_on_template_update
+      };
+      this.http.put<any>(url, updateData).subscribe({
+        next: () => {
+          this.snackBar.open('Compose file updated', 'Close', { duration: 3000 });
+          this.loadComposeFiles();
+          this.loadPendingProvision();
+        },
+        error: (err) => {
+          console.error('Failed to update compose', err);
+          this.snackBar.open(err?.error?.detail || 'Failed to update compose', 'Close', { duration: 4000 });
+        }
+      });
     });
   }
 

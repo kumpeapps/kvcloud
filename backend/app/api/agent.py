@@ -99,6 +99,13 @@ async def get_pending_provision(
     # Return provision configuration
     config = assignment.get_pending_provision_config()
     
+    # Merge docker compose files from separate storage
+    compose_files = assignment.get_compose_files()
+    if compose_files:
+        config['docker_compose_files'] = compose_files
+        if compose_files and 'install_docker' not in config:
+            config['install_docker'] = True
+    
     return {
         "provision_id": f"agent-{vmid}-{int(datetime.now().timestamp())}",
         "vmid": vmid,

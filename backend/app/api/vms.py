@@ -91,6 +91,7 @@ class VMCloneRequest(BaseModel):
 class ComposeFileEntry(BaseModel):
     path: str = "/root/docker-compose.yml"
     content: str
+    service_name: Optional[str] = None
     start_on_deploy: bool = False
     start_on_boot: bool = False
     template_id: Optional[int] = None
@@ -119,6 +120,7 @@ class ComposeFromTemplateRequest(BaseModel):
     template_id: int
     variables: Dict[str, Any] = {}
     path: str = "/root/docker-compose.yml"
+    service_name: Optional[str] = None
     start_on_deploy: bool = False
     start_on_boot: bool = False
     update_on_template_update: bool = False
@@ -2280,6 +2282,7 @@ async def add_compose_file(
     cfg = assignment.get_pending_provision_config() or {}
     cfg['docker_compose_files'] = files
     cfg['install_docker'] = True
+    assignment.provision_pending = True
     assignment.set_pending_provision(cfg)
     await db.commit()
     return {"message": "Compose file added", "entry": entry, "provision_pending": True}
@@ -2316,6 +2319,7 @@ async def update_compose_file(
     cfg = assignment.get_pending_provision_config() or {}
     cfg['docker_compose_files'] = files
     cfg['install_docker'] = True
+    assignment.provision_pending = True
     assignment.set_pending_provision(cfg)
     await db.commit()
     return {"message": "Compose file updated", "provision_pending": True}
@@ -2341,6 +2345,7 @@ async def delete_compose_file(
     cfg = assignment.get_pending_provision_config() or {}
     cfg['docker_compose_files'] = files
     cfg['install_docker'] = True if files else cfg.get('install_docker')
+    assignment.provision_pending = True
     assignment.set_pending_provision(cfg)
     await db.commit()
     return {"message": "Compose file removed", "provision_pending": True}
@@ -2370,6 +2375,7 @@ async def add_compose_from_template(
     entry = {
         "id": f"tpl-{req.template_id}-{int(datetime.now().timestamp()*1000)}",
         "path": req.path,
+        "service_name": req.service_name,
         "content": rendered,
         "start_on_deploy": req.start_on_deploy,
         "start_on_boot": req.start_on_boot,
@@ -2384,6 +2390,7 @@ async def add_compose_from_template(
     cfg = assignment.get_pending_provision_config() or {}
     cfg['docker_compose_files'] = files
     cfg['install_docker'] = True
+    assignment.provision_pending = True
     assignment.set_pending_provision(cfg)
     await db.commit()
     return {"message": "Compose added from template", "entry": entry, "provision_pending": True}
