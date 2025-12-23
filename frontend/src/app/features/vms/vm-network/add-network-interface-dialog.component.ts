@@ -161,14 +161,14 @@ export class AddNetworkInterfaceDialogComponent implements OnInit {
   ngOnInit() {
     // Load available bridges
     this.vmService.listNetworkBridges(this.data.nodeId).subscribe({
-      next: (response) => {
+      next: (response: any) => {
         this.bridges = response.bridges || [];
         // Set default bridge if available
         if (this.bridges.length > 0 && !this.interfaceForm.get('bridge')?.value) {
           this.interfaceForm.patchValue({ bridge: this.bridges[0].iface });
         }
       },
-      error: (error) => {
+      error: (error: any) => {
         console.error('Error loading bridges:', error);
         // Fallback to default bridge
         this.bridges = [{ iface: 'vmbr0', type: 'bridge' }];

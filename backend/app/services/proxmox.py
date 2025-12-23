@@ -142,32 +142,39 @@ class ProxmoxService:
             return (1, None, f'Guest agent exec error: {e}')
 
     async def guest_write_file(self, node_id: int, vmid: int, path: str, content: str, mode: str = '0644', owner: str = 'root:root') -> bool:
-        """Write a file inside the guest using a heredoc via exec.
+        """Write a file inside the guest using base64 encoding via exec.
 
-        This avoids relying on agent file-write variations across Proxmox/QGA versions.
+        This avoids quoting/newline issues when passing through shell wrapper.
         """
+        import base64
+        
         # Ensure directory exists
-        dir_cmd = f"mkdir -p $(dirname '{path}') && chown {owner} $(dirname '{path}')"
+        dir_cmd = f"mkdir -p $(dirname '{path}')"
         code, _, err = await self.guest_agent_exec(node_id, vmid, dir_cmd)
         if code != 0:
             print(f"[GuestAgent] mkdir failed: {err}")
             return False
 
-        # Write content via heredoc (quote to prevent expansion)
-        heredoc = (
-            f"cat > '{path}' <<'KVEOF'\n{content}\nKVEOF\n"
-        )
-        code, _, err = await self.guest_agent_exec(node_id, vmid, heredoc)
+        # Encode content as base64 to avoid any quoting/newline issues
+        content_bytes = content.encode('utf-8')
+        b64_content = base64.b64encode(content_bytes).decode('ascii')
+        
+        # Write using base64 decode
+        write_cmd = f"echo '{b64_content}' | base64 -d > '{path}'"
+        code, out, err = await self.guest_agent_exec(node_id, vmid, write_cmd)
         if code != 0:
-            print(f"[GuestAgent] write file failed: {err}")
+            print(f"[GuestAgent] write file failed: code={code}, out={out}, err={err}")
             return False
 
-        # Set permissions
+        # Set permissions and ownership
         perm_cmd = f"chmod {mode} '{path}' && chown {owner} '{path}'"
         code, _, err = await self.guest_agent_exec(node_id, vmid, perm_cmd)
         if code != 0:
             print(f"[GuestAgent] chmod/chown failed: {err}")
             return False
+        
+        print(f"[GuestAgent] Successfully wrote file: {path}")
+        return True
         return True
 
     async def provision_vm_via_guest_agent(self, node_id: int, vmid: int, config: Dict[str, Any]) -> Dict[str, Any]:
@@ -253,33 +260,109 @@ class ProxmoxService:
             result["steps"].append({"step": "apt_install", "status": "ok" if code == 0 else "error", "detail": err or out})
             print(f"[Provision] apt install result: code={code}")
 
-        # Docker compose
+        # Docker (install & repo setup)
+        if config.get('install_docker'):
+            print(f"[Provision] Installing Docker with official repo...")
+            repo_cmd = (
+                "set -e; "
+                "apt-get update -y || apt update -y; "
+                "apt-get install -y ca-certificates curl gnupg; "
+                "install -m 0755 -d /etc/apt/keyrings; "
+                "curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg; "
+                "chmod a+r /etc/apt/keyrings/docker.gpg; "
+                "echo \"deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(. /etc/os-release && echo $VERSION_CODENAME) stable\" > /etc/apt/sources.list.d/docker.list; "
+                "apt-get update -y || apt update -y"
+            )
+            code, out, err = await self.guest_agent_exec(node_id, vmid, repo_cmd, timeout=300)
+            result["steps"].append({"step": "docker_repo", "status": "ok" if code == 0 else "warning", "detail": err or out})
+            print(f"[Provision] Docker repo setup result: code={code}")
+
+            install_cmd = (
+                "DEBIAN_FRONTEND=noninteractive apt-get install -y "
+                "docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin "
+                "|| apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin"
+            )
+            code, out, err = await self.guest_agent_exec(node_id, vmid, install_cmd, timeout=600)
+            result["steps"].append({"step": "docker_install", "status": "ok" if code == 0 else "error", "detail": err or out})
+            print(f"[Provision] Docker install result: code={code}")
+
+        # Docker compose (supports multiple files)
+        compose_entries = []
+        if config.get('docker_compose_files'):
+            compose_entries.extend(config['docker_compose_files'])
         if config.get('docker_compose_content'):
-            path = config.get('docker_compose_path') or '/root/docker-compose.yml'
+            compose_entries.append({
+                "content": config['docker_compose_content'],
+                "path": config.get('docker_compose_path') or '/root/docker-compose.yml',
+                "start": bool(config.get('start_docker_compose'))
+            })
+
+        for entry in compose_entries:
+            content = entry.get('content')
+            path = entry.get('path') or '/root/docker-compose.yml'
+            start = bool(entry.get('start'))
+            if not content:
+                continue
             print(f"[Provision] Writing docker-compose to {path}...")
-            ok = await self.guest_write_file(node_id, vmid, path, config['docker_compose_content'], mode='0644', owner='root:root')
-            result["steps"].append({"step": "compose_write", "status": "ok" if ok else "error"})
+            ok = await self.guest_write_file(node_id, vmid, path, content, mode='0644', owner='root:root')
+            result["steps"].append({"step": f"compose_write:{path}", "status": "ok" if ok else "error"})
             print(f"[Provision] Docker compose write result: {ok}")
             
-            if config.get('start_docker_compose'):
+            if start:
                 dir_path = path.rsplit('/', 1)[0]
-                print(f"[Provision] Starting docker compose...")
+                print(f"[Provision] Starting docker compose at {dir_path}...")
                 code, out, err = await self.guest_agent_exec(node_id, vmid, f"cd '{dir_path}' && (docker compose up -d || docker-compose up -d)", timeout=300)
-                result["steps"].append({"step": "compose_up", "status": "ok" if code == 0 else "error", "detail": err or out})
+                result["steps"].append({"step": f"compose_up:{path}", "status": "ok" if code == 0 else "error", "detail": err or out})
                 print(f"[Provision] Docker compose up result: code={code}")
 
         # Network (netplan)
         if config.get('network_yaml'):
             print(f"[Provision] Configuring network via netplan...")
-            ok = await self.guest_write_file(node_id, vmid, '/etc/netplan/50-kvcloud.yaml', config['network_yaml'], mode='0644', owner='root:root')
+            print(f"[Provision] Network YAML content:\n{config['network_yaml']}")
+            
+            # First, remove any cloud-init netplan files that might conflict
+            print(f"[Provision] Removing cloud-init netplan files...")
+            code, out, err = await self.guest_agent_exec(node_id, vmid, "rm -f /etc/netplan/*cloud-init*.yaml /etc/netplan/50-cloud-init.yaml", timeout=30)
+            result["steps"].append({"step": "remove_cloudinit_netplan", "status": "ok" if code == 0 else "error", "detail": err or out})
+            print(f"[Provision] Remove cloud-init netplan result: code={code}")
+            
+            # Write our netplan config with stricter permissions (0600)
+            ok = await self.guest_write_file(node_id, vmid, '/etc/netplan/50-kvcloud.yaml', config['network_yaml'], mode='0600', owner='root:root')
             result["steps"].append({"step": "netplan_write", "status": "ok" if ok else "error"})
             print(f"[Provision] Netplan write result: {ok}")
             
             if ok:
-                print(f"[Provision] Applying netplan...")
-                code, out, err = await self.guest_agent_exec(node_id, vmid, "netplan apply || (systemctl restart systemd-networkd || true)", timeout=60)
-                result["steps"].append({"step": "netplan_apply", "status": "ok" if code == 0 else "error", "detail": err or out})
-                print(f"[Provision] Netplan apply result: code={code}, out={out}, err={err}")
+                # List netplan files to verify
+                print(f"[Provision] Listing netplan files...")
+                code, out, err = await self.guest_agent_exec(node_id, vmid, "ls -la /etc/netplan/ && cat /etc/netplan/50-kvcloud.yaml", timeout=30)
+                print(f"[Provision] Netplan files: {out}")
+                
+                # Validate netplan config
+                print(f"[Provision] Validating netplan configuration...")
+                code, out, err = await self.guest_agent_exec(node_id, vmid, "netplan validate 2>&1 || true", timeout=30)
+                print(f"[Provision] Netplan validate result: code={code}, out={out}, err={err}")
+                result["steps"].append({"step": "netplan_validate", "status": "ok" if code == 0 else "warning", "detail": err or out})
+                
+                # Generate netplan
+                print(f"[Provision] Generating netplan...")
+                code, out, err = await self.guest_agent_exec(node_id, vmid, "netplan generate", timeout=30)
+                print(f"[Provision] Netplan generate result: code={code}, out={out}, err={err}")
+                result["steps"].append({"step": "netplan_generate", "status": "ok" if code == 0 else "error", "detail": err or out})
+                
+                if code == 0:
+                    # Apply netplan
+                    print(f"[Provision] Applying netplan configuration...")
+                    apply_cmd = "netplan apply 2>&1"
+                    code, out, err = await self.guest_agent_exec(node_id, vmid, apply_cmd, timeout=60)
+                    result["steps"].append({"step": "netplan_apply", "status": "ok" if code == 0 else "error", "detail": err or out})
+                    print(f"[Provision] Netplan apply result: code={code}, out={out}, err={err}")
+                    
+                    # Restart networkd service
+                    if code == 0:
+                        print(f"[Provision] Restarting systemd-networkd...")
+                        code2, out2, err2 = await self.guest_agent_exec(node_id, vmid, "systemctl restart systemd-networkd", timeout=30)
+                        print(f"[Provision] Networkd restart: code={code2}")
+                        result["steps"].append({"step": "networkd_restart", "status": "ok" if code2 == 0 else "error", "detail": err2 or out2})
 
         print(f"[Provision] Provisioning complete for VM {vmid}")
         return result

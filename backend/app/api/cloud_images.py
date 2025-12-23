@@ -14,6 +14,7 @@ from app.core.dependencies import get_current_user
 from app.core.rbac import require_permission
 from app.services.proxmox import ProxmoxService
 from app.core.tasks_store import active_tasks as download_status, archive_task
+from app.core.config import settings
 
 router = APIRouter(prefix="/cloud-images", tags=["cloud-images"])
 
@@ -42,6 +43,7 @@ class CloudImageDownloadRequest(BaseModel):
     storage: str = Field(default="local-lvm", description="Storage name")
     custom_url: Optional[str] = Field(None, description="Optional custom image URL (QCOW2/IMG)")
     install_guest_agent: bool = Field(default=True, description="Install qemu-guest-agent in guest via cloud-init and halt before templating")
+    template_scripts: Optional[List[str]] = Field(None, description="Optional shell scripts to run inside the template VM after guest agent verification (requires ALLOW_TEMPLATE_CUSTOM_SCRIPTS)")
 
 
 # Pre-defined cloud images
@@ -236,6 +238,13 @@ async def download_cloud_image(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Cloud image not found (and no custom_url provided)"
         )
+
+    # Enforce admin guard for template scripts
+    if request.template_scripts and not settings.ALLOW_TEMPLATE_CUSTOM_SCRIPTS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Template customization scripts are disabled by administrator."
+        )
     service = ProxmoxService(db)
     
     # Get node details
@@ -299,12 +308,14 @@ async def download_cloud_image(
         node.ssh_username or "root",
         node.ssh_password,
         image_url,
+        image.distro,
         request.template_vmid,
         request.template_name,
         request.memory,
         request.cores,
         request.storage,
-        request.install_guest_agent
+        request.install_guest_agent,
+        request.template_scripts or []
     )
     
     return {
@@ -323,12 +334,14 @@ async def download_and_create_template(
     proxmox_user: str,
     proxmox_password: str,
     image_url: str,
+    image_distro: Optional[str],
     vmid: int,
     vm_name: str,
     memory: int,
     cores: int,
     storage: str,
-    install_guest_agent: bool
+    install_guest_agent: bool,
+    template_scripts: List[str]
 ):
     """Download cloud image and create Proxmox template."""
     from sqlalchemy import select
@@ -551,6 +564,21 @@ power_state:
         if temp_vlan_tag:
             net_config += f",tag={temp_vlan_tag}"
         
+        # Build custom script block (executed inside template via guest agent)
+        custom_script_block = "            # No custom template scripts provided or disabled\n"
+        if settings.ALLOW_TEMPLATE_CUSTOM_SCRIPTS and template_scripts:
+            parts = []
+            for idx, script in enumerate(template_scripts, start=1):
+                parts.append(
+                    "            echo 'STEP 4k: Running custom template script {idx}' >&2\n"
+                    "            SCRIPT_B64=$(cat <<'EOF' | base64 -w0\n".format(idx=idx)
+                    + script + "\nEOF\n)\n"
+                    f"            /usr/sbin/qm agent {{vmid}} exec --timeout 180 -- bash -lc \"echo $SCRIPT_B64 | base64 -d | bash\" || echo 'Warning: custom script {idx} failed' >&2\n"
+                )
+            custom_script_block = "".join(parts)
+        
+        image_distro = image_distro or ""
+
         commands = f"""
         set -e
         echo 'STEP 1: Downloading cloud image' >&2
@@ -567,7 +595,7 @@ power_state:
           --boot 'order=scsi0;ide2' \\
           --bootdisk scsi0 \\
           --serial0 socket \\
-          --vga serial0 \\
+          --vga std \\
           --agent 1"""
         
         # Add IP configuration if we have an IP from the pool
@@ -642,6 +670,29 @@ KVEOF
         else
             echo 'QEMU guest agent is ready' >&2
         fi
+
+        # Configure Docker APT repo inside Debian templates once agent and network are ready
+        if [ $AGENT_READY -eq 1 ] && [ "{image_distro}" = "debian" ]; then
+            echo 'STEP 4j: Configuring Docker APT repo inside template' >&2
+            DOCKER_B64=$(cat <<'EOF' | base64 -w0
+#!/bin/bash
+set -e
+apt-get update -y || apt update -y
+apt-get install -y ca-certificates curl gnupg
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+chmod a+r /etc/apt/keyrings/docker.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list
+apt-get update -y || apt update -y
+EOF
+)
+            /usr/sbin/qm agent {vmid} exec --timeout 180 -- bash -lc "echo $DOCKER_B64 | base64 -d | bash" || echo 'Warning: Docker repo configuration failed' >&2
+        fi
+
+        # Run custom template scripts if enabled
+        if [ $AGENT_READY -eq 1 ] && [ {int(bool(settings.ALLOW_TEMPLATE_CUSTOM_SCRIPTS))} -eq 1 ]; then
+{custom_script_block}
+        fi
         
         # Stop VM after verification
         echo 'Stopping VM after agent verification' >&2
@@ -660,6 +711,10 @@ KVEOF
         /usr/sbin/qm set {vmid} -delete sshkeys || true
         /usr/sbin/qm set {vmid} --boot 'order=scsi0'
         /bin/rm -f {user_data_path}
+        
+        # Remove cloud-init netplan file from the template VM
+        echo 'STEP 4j: Removing cloud-init netplan file' >&2
+        /usr/sbin/qm guest exec {vmid} -- /bin/sh -c "rm -f /etc/netplan/50-cloud-init.yaml /etc/netplan/*cloud-init*.yaml" 2>/dev/null || true
         
         echo 'STEP 5: Converting to template' >&2
         /usr/sbin/qm template {vmid}

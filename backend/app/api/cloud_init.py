@@ -495,6 +495,7 @@ def _build_default_network_block(vm_network: Dict[str, Any]) -> Dict[str, Any]:
     
     Uses modern Netplan v2 syntax with 'routes' instead of deprecated 'gateway4'.
     Interface name is 'ens18' which is standard for Proxmox VirtIO NICs.
+    Returns dict nested under 'network' key for proper netplan YAML structure.
     """
     interface: Dict[str, Any] = {}
 
@@ -539,9 +540,12 @@ def _build_default_network_block(vm_network: Dict[str, Any]) -> Dict[str, Any]:
                 interface["nameservers"]["search"] = search
 
     return {
-        "version": 2,
-        "ethernets": {
-            "ens18": interface  # Standard Proxmox VirtIO interface name
+        "network": {
+            "version": 2,
+            "renderer": "networkd",
+            "ethernets": {
+                "ens18": interface  # Standard Proxmox VirtIO interface name
+            }
         }
     }
 

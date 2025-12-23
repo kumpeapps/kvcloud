@@ -30,6 +30,21 @@
       </mat-card-content>
     </mat-card>
 
+
+    <!-- Lock Status Warning -->
+    <mat-card *ngIf="!error() && vm()?.is_locked" class="warning-card lock-status">
+      <mat-card-content>
+        <div class="lock-indicator">
+          <mat-icon color="warn">lock</mat-icon>
+          <div class="lock-info">
+            <strong>VM is Locked</strong>
+            <p *ngIf="vm()?.lock_reason">Reason: {{ vm()?.lock_reason }}</p>
+            <p *ngIf="!vm()?.lock_reason">This VM is currently locked and cannot be modified.</p>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
     <!-- VM Details -->
     <div *ngIf="!error() && vm()" class="vm-details">
       <!-- Operations Panel -->
@@ -113,6 +128,22 @@
             <button mat-raised-button (click)="unmountISO()" [disabled]="loading()">
               <mat-icon>eject</mat-icon>
               Unmount ISO
+            </button>
+            <button mat-raised-button 
+                    *ngIf="!vm()?.is_locked"
+                    color="accent"
+                    (click)="lockVM()" 
+                    [disabled]="loading()">
+              <mat-icon>lock</mat-icon>
+              Lock VM
+            </button>
+            <button mat-raised-button 
+                    *ngIf="vm()?.is_locked"
+                    color="accent"
+                    (click)="unlockVM()" 
+                    [disabled]="loading()">
+              <mat-icon>lock_open</mat-icon>
+              Unlock VM
             </button>
             <button mat-raised-button color="warn" (click)="deleteVM()" [disabled]="loading()">
               <mat-icon>delete</mat-icon>

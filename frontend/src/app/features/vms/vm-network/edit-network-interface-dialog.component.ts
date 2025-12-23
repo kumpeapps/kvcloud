@@ -155,10 +155,10 @@ export class EditNetworkInterfaceDialogComponent implements OnInit {
   ngOnInit() {
     // Load available bridges
     this.vmService.listNetworkBridges(this.data.nodeId).subscribe({
-      next: (response) => {
+      next: (response: any) => {
         this.bridges = response.bridges || [];
       },
-      error: (error) => {
+      error: (error: any) => {
         console.error('Error loading bridges:', error);
         this.bridges = [{ iface: 'vmbr0', type: 'bridge' }];
       }

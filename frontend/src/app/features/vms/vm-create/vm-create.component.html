@@ -261,102 +261,104 @@
           </form>
         </mat-step>
 
-        <!-- Step 5: Provisioning & IP Assignment -->
-        <mat-step [stepControl]="cloudInitForm" label="Provisioning & Network">
-          <form [formGroup]="cloudInitForm">
+        <!-- Step 5: Provisioning & Cloud-init -->
+        <mat-step [stepControl]="provisioningForm" label="Provisioning">
+          <form [formGroup]="provisioningForm">
             <div class="form-grid">
-              <div class="full-width">
-                <h3>Provisioning Settings</h3>
-                <mat-hint>Configure guest user, SSH keys, packages, compose, timezone/locale.</mat-hint>
-              </div>
+              <h3>Cloud-init Configuration</h3>
 
-              <h4>Provisioning Overrides (optional)</h4>
-                <div class="form-grid">
-                  <mat-form-field appearance="outline">
-                    <mat-label>Default User</mat-label>
-                    <input matInput formControlName="default_user" placeholder="e.g., ubuntu">
-                  </mat-form-field>
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Cloud-init Profile (Optional)</mat-label>
+                <mat-select formControlName="cloudInitProfileId">
+                  <mat-option [value]="null">-- None (Manual Configuration) --</mat-option>
+                  @for (profile of cloudInitProfiles(); track profile.id) {
+                    <mat-option [value]="profile.id">
+                      {{ profile.name }}
+                      @if (profile.description) {
+                        ({{ profile.description }})
+                      }
+                    </mat-option>
+                  }
+                </mat-select>
+                <mat-hint>Select an admin profile or configure per-VM settings</mat-hint>
+              </mat-form-field>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Password</mat-label>
-                    <input matInput type="password" formControlName="default_password" placeholder="plaintext allowed; will be hashed">
-                  </mat-form-field>
+              <h3>Guest Agent & Provisioning</h3>
+              <mat-checkbox formControlName="enableGuestAgent">
+                Enable QEMU Guest Agent
+              </mat-checkbox>
+              <mat-checkbox formControlName="provisionViaGuestAgent">
+                Provision via Guest Agent (inside-VM provisioning, no cloud-init)
+              </mat-checkbox>
 
-                  <div class="full-width">
-                    <mat-checkbox formControlName="ssh_pwauth">Enable SSH Password Auth</mat-checkbox>
-                  </div>
+              <h3>User & SSH Configuration</h3>
+              <mat-form-field appearance="outline" class="half-width">
+                <mat-label>Default User</mat-label>
+                <input matInput formControlName="defaultUser" placeholder="ubuntu">
+              </mat-form-field>
 
-                  <mat-form-field appearance="outline" class="full-width">
-                    <mat-label>SSH Authorized Keys</mat-label>
-                    <textarea matInput rows="4" formControlName="ssh_authorized_keys" placeholder="One per line or comma-separated"></textarea>
-                  </mat-form-field>
+              <mat-form-field appearance="outline" class="half-width">
+                <mat-label>Default Password</mat-label>
+                <input matInput type="password" formControlName="defaultPassword">
+              </mat-form-field>
 
-                  <mat-form-field appearance="outline" class="full-width">
-                    <mat-label>Packages to Install</mat-label>
-                    <textarea matInput rows="3" formControlName="packages" placeholder="e.g., curl, htop, docker"></textarea>
-                  </mat-form-field>
+              <mat-checkbox formControlName="sshPwauth">
+                Allow SSH Password Authentication
+              </mat-checkbox>
 
-                  <mat-form-field appearance="outline" class="full-width">
-                    <mat-label>Docker Compose YAML</mat-label>
-                    <textarea matInput rows="6" formControlName="docker_compose_content" placeholder="Paste docker-compose.yml content"></textarea>
-                  </mat-form-field>
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>SSH Authorized Keys</mat-label>
+                <textarea matInput formControlName="sshAuthorizedKeys" rows="4"
+                  placeholder="ssh-rsa AAAAB3...&#10;ssh-rsa AAAAB3..."></textarea>
+                <mat-hint>One SSH public key per line</mat-hint>
+              </mat-form-field>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Compose Path</mat-label>
-                    <input matInput formControlName="docker_compose_path">
-                    <mat-hint>Default: /root/docker-compose.yml</mat-hint>
-                  </mat-form-field>
+              <h3>Package Management</h3>
+              <mat-checkbox formControlName="aptUpdate">
+                Run apt update on first boot
+              </mat-checkbox>
+              <mat-checkbox formControlName="aptUpgrade">
+                Run apt upgrade on first boot
+              </mat-checkbox>
+              <mat-checkbox formControlName="aptRebootIfRequired">
+                Reboot if required after upgrade
+              </mat-checkbox>
 
-                  <div>
-                    <mat-checkbox formControlName="start_docker_compose">Start Compose on Boot</mat-checkbox>
-                  </div>
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Additional Packages</mat-label>
+                <textarea matInput formControlName="packages" rows="4"
+                  placeholder="curl&#10;git&#10;htop"></textarea>
+                <mat-hint>One package per line</mat-hint>
+              </mat-form-field>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Timezone</mat-label>
-                    <input matInput formControlName="timezone" placeholder="e.g., UTC or America/Chicago">
-                  </mat-form-field>
+              <h3>Docker Configuration</h3>
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Docker Compose Path</mat-label>
+                <input matInput formControlName="dockerComposePath" 
+                       placeholder="/root/docker-compose.yml">
+              </mat-form-field>
 
-                  <mat-form-field appearance="outline">
-                    <mat-label>Locale</mat-label>
-                    <input matInput formControlName="locale" placeholder="e.g., en_US.UTF-8">
-                  </mat-form-field>
-                </div>
-              
-              <div class="full-width">
-                <h3>IP Address Assignment</h3>
-                <mat-checkbox formControlName="autoAssignIP">
-                  Auto-assign IP from pool
-                </mat-checkbox>
-                <mat-hint>Automatically allocate an IP address from a pool</mat-hint>
-              </div>
-              <div class="full-width">
-                <h3>Guest Agent</h3>
-                <mat-checkbox formControlName="enableGuestAgent">
-                  Enable QEMU Guest Agent device (VM config)
-                </mat-checkbox>
-                <mat-checkbox formControlName="provisionViaGuestAgent">
-                  Provision via Guest Agent (no cloud-init)
-                </mat-checkbox>
-                <mat-hint>
-                  Requires qemu-guest-agent installed and running in the guest. We will wait for agent readiness and apply user, SSH keys, packages, hostname/timezone, and netplan.
-                </mat-hint>
-              </div>
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>Docker Compose YAML</mat-label>
+                <textarea matInput formControlName="dockerComposeContent" rows="6"
+                  placeholder="version: '3'&#10;services:&#10;  web:&#10;    image: nginx"></textarea>
+                <mat-hint>Docker compose file content (optional)</mat-hint>
+              </mat-form-field>
 
-              @if (cloudInitForm.value.autoAssignIP) {
-                <mat-form-field appearance="outline" class="full-width">
-                  <mat-label>IP Pool</mat-label>
-                  <mat-select formControlName="ipPoolId">
-                    @for (pool of ipPools(); track pool.id) {
-                      <mat-option [value]="pool.id">
-                        {{ pool.name }} - {{ pool.cidr }}
-                        ({{ pool.available_ips || 0 }} available)
-                      </mat-option>
-                    }
-                  </mat-select>
-                  <mat-hint>Pool to allocate IP from</mat-hint>
-                  <mat-error>Please select an IP pool</mat-error>
-                </mat-form-field>
-              }
+              <mat-checkbox formControlName="startDockerCompose">
+                Auto-start Docker Compose on boot
+              </mat-checkbox>
+
+              <h3>System Configuration</h3>
+              <mat-form-field appearance="outline" class="half-width">
+                <mat-label>Timezone</mat-label>
+                <input matInput formControlName="timezone" placeholder="UTC">
+              </mat-form-field>
+
+              <mat-form-field appearance="outline" class="half-width">
+                <mat-label>Locale</mat-label>
+                <input matInput formControlName="locale" placeholder="en_US.UTF-8">
+              </mat-form-field>
             </div>
 
             <div class="step-actions">

@@ -1,7 +1,7 @@
 """Add lock_reason to vm_assignments.
 
 Revision ID: a1b2c3d4e5f7
-Revises: 20251221181627_add_vm_lock_and_pool_tracking
+Revises: 20251221181627
 Create Date: 2024-12-22 12:00:00.000000
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'a1b2c3d4e5f7'
-down_revision = '20251221181627_add_vm_lock_and_pool_tracking'
+down_revision = '20251221181627'
 branch_labels = None
 depends_on = None
 

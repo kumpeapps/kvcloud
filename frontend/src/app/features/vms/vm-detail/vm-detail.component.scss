@@ -37,6 +37,13 @@
   .header-actions {
     display: flex;
     align-items: center;
+    gap: 12px;
+
+    .lock-icon {
+      font-size: 28px;
+      width: 28px;
+      height: 28px;
+    }
   }
 }
 
@@ -48,6 +55,43 @@
     display: flex;
     align-items: center;
     gap: 12px;
+  }
+}
+
+.warning-card {
+  background-color: rgba(255, 152, 0, 0.1);
+  margin-bottom: 24px;
+
+  &.lock-status {
+    mat-card-content {
+      .lock-indicator {
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+
+        mat-icon {
+          font-size: 32px;
+          width: 32px;
+          height: 32px;
+          margin-top: 4px;
+        }
+
+        .lock-info {
+          flex: 1;
+
+          strong {
+            font-size: 1.1rem;
+            display: block;
+            margin-bottom: 8px;
+          }
+
+          p {
+            margin: 4px 0;
+            color: var(--text-secondary);
+          }
+        }
+      }
+    }
   }
 }
 

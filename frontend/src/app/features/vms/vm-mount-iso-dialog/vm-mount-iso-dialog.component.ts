@@ -139,7 +139,7 @@ export class VMMountISODialogComponent implements OnInit {
         this.isos.set(isos);
         this.loading.set(false);
       },
-      error: (err) => {
+      error: (err: any) => {
         console.error('Error loading ISOs:', err);
         this.snackBar.open('Failed to load available ISOs', 'Close', { duration: 5000 });
         this.loading.set(false);
@@ -168,7 +168,7 @@ export class VMMountISODialogComponent implements OnInit {
         this.snackBar.open('ISO mounted successfully', 'Close', { duration: 3000 });
         this.dialogRef.close(true);
       },
-      error: (err) => {
+      error: (err: any) => {
         console.error('Error mounting ISO:', err);
         this.snackBar.open(
           `Failed to mount ISO: ${err.error?.detail || 'Unknown error'}`,

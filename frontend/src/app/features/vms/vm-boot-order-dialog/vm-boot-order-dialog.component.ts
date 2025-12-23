@@ -60,20 +60,20 @@ export class VmBootOrderDialogComponent implements OnInit {
   loadBootOrder(): void {
     this.loading.set(true);
     this.vmService.getBootOrder(this.data.nodeId, this.data.vmid).subscribe({
-      next: (resp) => {
+      next: (resp: any) => {
         const raw = (resp.boot_order || resp.boot || 'cdn').replace(/[^cdna]/g, '');
         const codes = raw ? raw.split('') : ['c', 'd', 'n'];
-        const enabled = new Set(codes);
+        const enabled = new Set<string>(codes);
         const enabledDevices = codes
-          .map(code => this.devices.find(device => device.code === code))
-          .filter((device): device is BootDevice => Boolean(device));
+          .map((code: string) => this.devices.find((device: BootDevice) => device.code === code))
+          .filter((device: BootDevice | undefined): device is BootDevice => Boolean(device));
         const remainingDevices = this.devices.filter(device => !enabled.has(device.code));
 
         this.order.set([...enabledDevices, ...remainingDevices]);
         this.included.set(enabled.size ? enabled : new Set(['c', 'd', 'n']));
         this.loading.set(false);
       },
-      error: (err) => {
+      error: (err: any) => {
         console.error('Failed to load boot order', err);
         this.snackBar.open('Failed to load current boot order', 'Close', { duration: 5000 });
         this.order.set([...this.devices]);
@@ -126,12 +126,12 @@ export class VmBootOrderDialogComponent implements OnInit {
 
     this.saving.set(true);
     this.vmService.setBootOrder(this.data.nodeId, this.data.vmid, bootOrder).subscribe({
-      next: (resp) => {
+      next: (resp: any) => {
         const savedOrder = resp.boot_order || bootOrder;
         this.snackBar.open(`Boot order saved (${savedOrder})`, 'Close', { duration: 3000 });
         this.dialogRef.close({ bootOrder: savedOrder });
       },
-      error: (err) => {
+      error: (err: any) => {
         console.error('Failed to save boot order', err);
         this.snackBar.open(`Failed to save boot order: ${err.error?.detail || 'Unknown error'}`, 'Close', { duration: 5000 });
         this.saving.set(false);

@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     INITIAL_ADMIN_EMAIL: str = "admin@kvcloud.local"
     INITIAL_ADMIN_PASSWORD: str = "changeme"
     INITIAL_ADMIN_FULL_NAME: str = "Administrator"
+
+    # Template customization
+    ALLOW_TEMPLATE_CUSTOM_SCRIPTS: bool = False
     
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod

@@ -180,7 +180,7 @@ async def get_vm_status(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Get VM status."""
+    """Get VM status including lock status."""
     service = proxmox_service.ProxmoxService(db)
     vm_status = await service.get_vm_status(node_id, vmid)
     if not vm_status:
@@ -188,6 +188,24 @@ async def get_vm_status(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="VM not found"
         )
+    
+    # Get lock status from VM assignment
+    result = await db.execute(
+        select(VMAssignment).where(
+            VMAssignment.vmid == vmid,
+            VMAssignment.node_id == node_id
+        )
+    )
+    assignment = result.scalar_one_or_none()
+    
+    # Add lock info to response
+    if assignment:
+        vm_status['is_locked'] = assignment.is_locked
+        vm_status['lock_reason'] = assignment.lock_reason
+    else:
+        vm_status['is_locked'] = False
+        vm_status['lock_reason'] = None
+    
     return vm_status
 
 
@@ -697,13 +715,41 @@ async def create_vm_background(
 
             # Netplan from resolver
             vm_network = await _resolve_vm_network_config(db, vm_data.vmid)
-            if vm_network:
+            if vm_network and (vm_network.get('enable_dhcp') or vm_network.get('ip_address')):
                 from app.api.provision import _yaml_network_from_vm_net
                 cfg['network_yaml'] = _yaml_network_from_vm_net(vm_network)
+            else:
+                print(f"[{task_id}] Skipping network config: vm_network={vm_network}")
 
+            # Start VM before provisioning
+            update_progress(82, "▶️  Starting VM for provisioning...")
+            await service.start_vm(node_id, vm_data.vmid)
+            
+            # Wait for VM to boot (check status)
+            import time
+            max_wait = 120  # 2 minutes
+            waited = 0
+            while waited < max_wait:
+                await asyncio.sleep(5)
+                waited += 5
+                vm_status = await service.get_vm_status(node_id, vm_data.vmid)
+                if vm_status and vm_status.get('status') == 'running':
+                    print(f"[{task_id}] VM started and running after {waited}s")
+                    break
+            
+            # Give guest agent time to start
+            update_progress(85, "⏳ Waiting for guest agent...")
+            await asyncio.sleep(10)
+            
             # Execute provisioning (waits for agent readiness internally)
+            update_progress(87, "🤖 Running provisioning via guest agent...")
             prov_result = await service.provision_vm_via_guest_agent(node_id, vm_data.vmid, cfg)
             print(f"[{task_id}] Provisioning result: {prov_result}")
+            
+            # Restart VM to apply provisioning changes (networking, etc.)
+            update_progress(95, "🔄 Restarting VM to apply changes...")
+            await service.restart_vm(node_id, vm_data.vmid)
+            print(f"[{task_id}] VM restarted after provisioning")
         
         update_progress(100, f"✅ VM {vm_data.vmid} created successfully!")
         

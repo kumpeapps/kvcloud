@@ -194,11 +194,11 @@ export class VMNetworkComponent implements OnInit {
   loadInterfaces() {
     this.loading.set(true);
     this.vmService.listNetworkInterfaces(this.nodeId, this.vmid).subscribe({
-      next: (response) => {
+      next: (response: any) => {
         this.interfaces.set(response.interfaces || []);
         this.loading.set(false);
       },
-      error: (error) => {
+      error: (error: any) => {
         console.error('Error loading network interfaces:', error);
         this.snackBar.open('Failed to load network interfaces', 'Close', { duration: 3000 });
         this.loading.set(false);
@@ -221,11 +221,11 @@ export class VMNetworkComponent implements OnInit {
 
   addInterface(interfaceConfig: any) {
     this.vmService.addNetworkInterface(this.nodeId, this.vmid, interfaceConfig).subscribe({
-      next: (response) => {
+      next: (response: any) => {
         this.snackBar.open(response.message || 'Interface added successfully', 'Close', { duration: 3000 });
         setTimeout(() => this.loadInterfaces(), 2000);
       },
-      error: (error) => {
+      error: (error: any) => {
         console.error('Error adding interface:', error);
         this.snackBar.open('Failed to add interface', 'Close', { duration: 3000 });
       }
@@ -251,11 +251,11 @@ export class VMNetworkComponent implements OnInit {
 
   updateInterface(interfaceName: string, interfaceConfig: any) {
     this.vmService.updateNetworkInterface(this.nodeId, this.vmid, interfaceName, interfaceConfig).subscribe({
-      next: (response) => {
+      next: (response: any) => {
         this.snackBar.open(response.message || 'Interface updated successfully', 'Close', { duration: 3000 });
         setTimeout(() => this.loadInterfaces(), 2000);
       },
-      error: (error) => {
+      error: (error: any) => {
         console.error('Error updating interface:', error);
         this.snackBar.open('Failed to update interface', 'Close', { duration: 3000 });
       }
@@ -271,11 +271,11 @@ export class VMNetworkComponent implements OnInit {
 
   deleteInterface(interfaceName: string) {
     this.vmService.deleteNetworkInterface(this.nodeId, this.vmid, interfaceName).subscribe({
-      next: (response) => {
+      next: (response: any) => {
         this.snackBar.open(response.message || 'Interface deleted successfully', 'Close', { duration: 3000 });
         setTimeout(() => this.loadInterfaces(), 2000);
       },
-      error: (error) => {
+      error: (error: any) => {
         console.error('Error deleting interface:', error);
         this.snackBar.open('Failed to delete interface', 'Close', { duration: 3000 });
       }

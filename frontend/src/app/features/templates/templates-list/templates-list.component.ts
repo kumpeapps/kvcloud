@@ -92,7 +92,7 @@ interface CloningTask {
             <div class="template-details">
               <div class="detail-row">
                 <span class="label">CPU:</span>
-                <span class="value">{{ template.cpus || 'N/A' }} cores</span>
+                <span class="value">{{ template.cpu || 'N/A' }} cores</span>
               </div>
               <div class="detail-row">
                 <span class="label">Memory:</span>
@@ -102,10 +102,10 @@ interface CloningTask {
                 <span class="label">Disk:</span>
                 <span class="value">{{ formatDisk(template.maxdisk) }}</span>
               </div>
-              <div class="detail-row" *ngIf="template.tags">
+              <div class="detail-row">
                 <span class="label">Tags:</span>
                 <div class="tags">
-                  <mat-chip *ngFor="let tag of getTags(template.tags)">{{ tag }}</mat-chip>
+                  <mat-chip *ngFor="let tag of (getTags(template.tags ?? '') || [])">{{ tag }}</mat-chip>
                 </div>
               </div>
             </div>
@@ -436,11 +436,11 @@ export class TemplatesListComponent implements OnInit, OnDestroy {
     this.vmService.getTemplates(this.selectedNodeId)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: (response) => {
+        next: (response: any) => {
           this.templates = response.templates || [];
           this.loading = false;
         },
-        error: (error) => {
+        error: (error: any) => {
           console.error('Failed to load templates:', error);
           this.templates = [];
           this.loading = false;
@@ -493,7 +493,7 @@ export class TemplatesListComponent implements OnInit, OnDestroy {
       .subscribe(() => {
         this.vmService.getTaskStatus(this.selectedNodeId!, task.taskId)
           .subscribe({
-            next: (response) => {
+            next: (response: any) => {
               if (response.status === 'stopped') {
                 // Task completed
                 task.progress = 100;
@@ -513,7 +513,7 @@ export class TemplatesListComponent implements OnInit, OnDestroy {
                 task.message = response.message || 'Cloning in progress...';
               }
             },
-            error: (error) => {
+            error: (error: any) => {
               console.error('Failed to get task status:', error);
               task.message = 'Error tracking clone progress';
             }

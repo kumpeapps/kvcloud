@@ -241,21 +241,19 @@ export class CloneVmDialogComponent implements OnInit {
       description: formValue.description || undefined
     };
 
-    this.vmService.cloneVm(this.data.nodeId, this.data.sourceVmid, cloneData)
-      .subscribe({
-        next: (response) => {
-          console.log('Clone task started:', response);
-          this.dialogRef.close({
-            success: true,
-            newVmid: cloneData.newid,
-            taskId: response.upid
-          });
-        },
-        error: (error) => {
-          console.error('Failed to clone VM:', error);
-          this.error = error.error?.detail || 'Failed to clone VM. Please try again.';
-          this.loading = false;
-        }
+    this.vmService.cloneVM(this.data.nodeId, this.data.sourceVmid, cloneData.newid, cloneData.name)
+      .then((response: any) => {
+        console.log('Clone task started:', response);
+        this.dialogRef.close({
+          success: true,
+          newVmid: cloneData.newid,
+          taskId: response.upid
+        });
+      })
+      .catch((error: any) => {
+        console.error('Failed to clone VM:', error);
+        this.error = error.error?.detail || 'Failed to clone VM. Please try again.';
+        this.loading = false;
       });
   }
 

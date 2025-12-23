@@ -154,11 +154,11 @@ export class VMDisksComponent implements OnInit {
   loadDisks() {
     this.loading.set(true);
     this.vmService.listDisks(this.nodeId, this.vmid).subscribe({
-      next: (response) => {
+      next: (response: any) => {
         this.disks.set(response.disks || []);
         this.loading.set(false);
       },
-      error: (error) => {
+      error: (error: any) => {
         console.error('Error loading disks:', error);
         this.snackBar.open('Failed to load disks', 'Close', { duration: 3000 });
         this.loading.set(false);
@@ -181,11 +181,11 @@ export class VMDisksComponent implements OnInit {
 
   addDisk(diskConfig: any) {
     this.vmService.addDisk(this.nodeId, this.vmid, diskConfig).subscribe({
-      next: (response) => {
+      next: (response: any) => {
         this.snackBar.open(response.message || 'Disk added successfully', 'Close', { duration: 3000 });
         setTimeout(() => this.loadDisks(), 2000);
       },
-      error: (error) => {
+      error: (error: any) => {
         console.error('Error adding disk:', error);
         this.snackBar.open('Failed to add disk', 'Close', { duration: 3000 });
       }
@@ -207,11 +207,11 @@ export class VMDisksComponent implements OnInit {
 
   resizeDisk(disk: string, size: string) {
     this.vmService.resizeDisk(this.nodeId, this.vmid, disk, size).subscribe({
-      next: (response) => {
+      next: (response: any) => {
         this.snackBar.open(response.message || 'Disk resize initiated', 'Close', { duration: 3000 });
         setTimeout(() => this.loadDisks(), 2000);
       },
-      error: (error) => {
+      error: (error: any) => {
         console.error('Error resizing disk:', error);
         this.snackBar.open('Failed to resize disk', 'Close', { duration: 3000 });
       }
@@ -227,11 +227,11 @@ export class VMDisksComponent implements OnInit {
 
   deleteDisk(disk: string) {
     this.vmService.deleteDisk(this.nodeId, this.vmid, disk).subscribe({
-      next: (response) => {
+      next: (response: any) => {
         this.snackBar.open(response.message || 'Disk deleted successfully', 'Close', { duration: 3000 });
         setTimeout(() => this.loadDisks(), 2000);
       },
-      error: (error) => {
+      error: (error: any) => {
         console.error('Error deleting disk:', error);
         this.snackBar.open('Failed to delete disk', 'Close', { duration: 3000 });
       }

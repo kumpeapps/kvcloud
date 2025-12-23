@@ -839,13 +839,12 @@
 - [ ] Tests: firewall rule application, notification delivery, 2FA happy/denial paths, SSH key/API key CRUD
 
 ### Session 7 (Planned)
-- HA & Migration: models + APIs for HA enablement and VM migrate flows
+- Migration: models + APIs for HA enablement and VM migrate flows
 - Plans & Pricing: plans/pricing models, CRUD, and basic UI; tie to VM create
 - Reseller Isolation: user hierarchy + scoped filtering; reseller dashboards
 - ISO/Template polish: media groups + template metadata management
 
 #### Session 7 Checklist
-- [ ] HA: `ha_config` migration; enable/disable API; failover policy fields; tests
 - [ ] Migration: migrate endpoint with status tracking; UI wizard with target node selection; task integration
 - [ ] Plans/Pricing: `plans`, `user_plans`, `pricing` migrations; CRUD APIs; assign plan on VM creation; UI forms
 - [ ] Reseller: add `is_reseller` + `parent_id`; enforce tenant scoping in queries; reseller dashboard view

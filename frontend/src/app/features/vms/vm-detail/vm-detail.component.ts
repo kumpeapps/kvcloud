@@ -482,4 +482,50 @@ export class VmDetailComponent implements OnInit {
       });
     });
   }
+  lockVM(): void {
+    const reason = prompt('Enter reason for locking this VM:');
+    if (!reason) return;
+
+    const nodeId = this.nodeId();
+    const vmid = this.vmid();
+
+    this.confirmationService.confirmAction(
+      'Lock VM',
+      `Lock VM ${vmid}? This will prevent any changes until unlocked.`
+    ).subscribe(confirmed => {
+      if (confirmed) {
+        this.vmService.lockVM(nodeId, vmid, reason).subscribe({
+          next: () => {
+            this.snackBar.open('VM locked successfully', 'Close', { duration: 3000 });
+            this.loadVMDetails();
+          },
+          error: (err: any) => {
+            this.snackBar.open(`Failed to lock VM: ${err.error?.detail || 'Unknown error'}`, 'Close', { duration: 5000 });
+          }
+        });
+      }
+    });
+  }
+
+  unlockVM(): void {
+    const nodeId = this.nodeId();
+    const vmid = this.vmid();
+
+    this.confirmationService.confirmAction(
+      'Unlock VM',
+      `Unlock VM ${vmid}? This will allow changes to be made.`
+    ).subscribe(confirmed => {
+      if (confirmed) {
+        this.vmService.unlockVM(nodeId, vmid).subscribe({
+          next: () => {
+            this.snackBar.open('VM unlocked successfully', 'Close', { duration: 3000 });
+            this.loadVMDetails();
+          },
+          error: (err: any) => {
+            this.snackBar.open(`Failed to unlock VM: ${err.error?.detail || 'Unknown error'}`, 'Close', { duration: 5000 });
+          }
+        });
+      }
+    });
+  }
 }

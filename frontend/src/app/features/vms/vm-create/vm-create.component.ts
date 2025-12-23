@@ -5,9 +5,8 @@ import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angula
 import { MaterialModule } from '../../../shared/material.module';
 import { VMService, VMCreateData } from '../../../core/services/vm.service';
 import { ClusterService, ClusterNode } from '../../../core/services/cluster.service';
-import { CloudInitService, CloudInitProfile } from '../../../core/services/cloud-init.service';
-import { IPPoolService, IPPool } from '../../../core/services/ippool.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { CloudInitService, CloudInitProfile } from '../../../core/services/cloud-init.service';
 
 @Component({
   selector: 'app-vm-create',
@@ -25,8 +24,7 @@ export class VmCreateComponent implements OnInit {
   templates = signal<any[]>([]);
   isos = signal<string[]>([]);
   storages = signal<any[]>([]);
-  cloudInitProfiles = signal<any[]>([]);
-  ipPools = signal<any[]>([]);
+  cloudInitProfiles = signal<CloudInitProfile[]>([]);
   loading = signal(false);
   error = signal<string | null>(null);
   
@@ -35,14 +33,13 @@ export class VmCreateComponent implements OnInit {
   resourceForm!: FormGroup;
   storageForm!: FormGroup;
   networkForm!: FormGroup;
-  cloudInitForm!: FormGroup;
+  provisioningForm!: FormGroup;
   
   constructor(
     private fb: FormBuilder,
     private vmService: VMService,
     private clusterService: ClusterService,
     private cloudInitService: CloudInitService,
-    private ippoolService: IPPoolService,
     private router: Router,
     private snackBar: MatSnackBar
   ) {
@@ -52,14 +49,13 @@ export class VmCreateComponent implements OnInit {
   ngOnInit(): void {
     this.loadNodes();
     this.loadCloudInitProfiles();
-    this.loadIPPools();
   }
   
   private initForms(): void {
     // Step 1: Basic Configuration
     this.basicForm = this.fb.group({
       nodeId: [null, Validators.required],
-      vmid: [null],  // Optional - will be auto-generated if not provided
+      vmid: [null, [Validators.required, Validators.min(100), Validators.max(999999999)]],
       name: ['', [Validators.required, Validators.minLength(1), Validators.maxLength(255)]],
       osType: ['l26', Validators.required],
       useTemplate: [false],
@@ -90,22 +86,23 @@ export class VmCreateComponent implements OnInit {
       networkModel: ['virtio', Validators.required],
       enableFirewall: [false]
     });
-    
-    // Step 5: Provisioning & IP Assignment
-    this.cloudInitForm = this.fb.group({
-      autoAssignIP: [false],
-      ipPoolId: [null],
-      enableGuestAgent: [true],
+
+    // Step 5: Provisioning & Cloud-init
+    this.provisioningForm = this.fb.group({
+      cloudInitProfileId: [null],
+      enableGuestAgent: [false],
       provisionViaGuestAgent: [false],
-      // Cloud-init overrides
-      default_user: [''],
-      default_password: [''],
-      ssh_authorized_keys: [''], // newline or comma separated
-      ssh_pwauth: [true],
-      packages: [''], // newline or comma separated
-      docker_compose_content: [''],
-      docker_compose_path: ['/root/docker-compose.yml'],
-      start_docker_compose: [false],
+      defaultUser: [''],
+      defaultPassword: [''],
+      sshAuthorizedKeys: [''],
+      sshPwauth: [true],
+      packages: [''],
+      aptUpdate: [true],
+      aptUpgrade: [false],
+      aptRebootIfRequired: [false],
+      dockerComposePath: ['/root/docker-compose.yml'],
+      dockerComposeContent: [''],
+      startDockerCompose: [false],
       timezone: [''],
       locale: ['']
     });
@@ -114,7 +111,6 @@ export class VmCreateComponent implements OnInit {
     this.basicForm.get('nodeId')?.valueChanges.subscribe(nodeId => {
       if (nodeId) {
         this.loadNodeResources(nodeId);
-        this.fetchNextVMID(nodeId);
       }
     });
     
@@ -140,55 +136,6 @@ export class VmCreateComponent implements OnInit {
       }
       isoControl?.updateValueAndValidity();
     });
-    
-    // If provisioning via guest agent, ensure guest agent device enabled
-    this.cloudInitForm.get('provisionViaGuestAgent')?.valueChanges.subscribe(enabled => {
-      if (enabled) {
-        // Ensure guest agent device enabled
-        this.cloudInitForm.get('enableGuestAgent')?.setValue(true);
-      }
-    });
-    
-    // Watch for IP assignment toggle
-    this.cloudInitForm.get('autoAssignIP')?.valueChanges.subscribe(enabled => {
-      const poolControl = this.cloudInitForm.get('ipPoolId');
-      if (enabled) {
-        poolControl?.setValidators(Validators.required);
-      } else {
-        poolControl?.clearValidators();
-      }
-      poolControl?.updateValueAndValidity();
-    });
-  }
-  
-  private async loadCloudInitProfiles(): Promise<void> {
-    try {
-      this.cloudInitService.listProfiles().subscribe({
-        next: (response: { profiles: CloudInitProfile[] }) => {
-          this.cloudInitProfiles.set(response.profiles);
-        },
-        error: (err: any) => {
-          console.error('Failed to load cloud-init profiles:', err);
-        }
-      });
-    } catch (err) {
-      console.error('Failed to load cloud-init profiles:', err);
-    }
-  }
-  
-  private async loadIPPools(): Promise<void> {
-    try {
-      this.ippoolService.listPools().subscribe({
-        next: (pools: IPPool[]) => {
-          this.ipPools.set(pools);
-        },
-        error: (err: any) => {
-          console.error('Failed to load IP pools:', err);
-        }
-      });
-    } catch (err) {
-      console.error('Failed to load IP pools:', err);
-    }
   }
   
   private async loadNodes(): Promise<void> {
@@ -231,13 +178,13 @@ export class VmCreateComponent implements OnInit {
       this.loading.set(false);
     }
   }
-  
-  private async fetchNextVMID(nodeId: number): Promise<void> {
+
+  private async loadCloudInitProfiles(): Promise<void> {
     try {
-      const response = await this.vmService.getNextVMID(nodeId);
-      this.basicForm.patchValue({ vmid: response.nextid });
+      const response = await this.cloudInitService.listProfiles().toPromise();
+      this.cloudInitProfiles.set(response?.profiles || []);
     } catch (err: any) {
-      console.error('Failed to fetch next VMID:', err);
+      this.snackBar.open('Failed to load cloud-init profiles', 'Close', { duration: 3000 });
     }
   }
   
@@ -251,7 +198,7 @@ export class VmCreateComponent implements OnInit {
     this.error.set(null);
     
     try {
-      const vmData: any = {
+      const vmData: VMCreateData = {
         vmid: this.basicForm.value.vmid,
         name: this.basicForm.value.name,
         cores: this.resourceForm.value.cores * this.resourceForm.value.sockets,
@@ -273,60 +220,73 @@ export class VmCreateComponent implements OnInit {
       if (this.basicForm.value.useIso) {
         vmData.iso = this.basicForm.value.iso;
       }
-      
-      // Collect provisioning overrides (guest-agent approach)
-      const overrides = this.cloudInitForm.value;
 
-      // Helper to parse list fields
-      const parseList = (val: string | string[] | null | undefined): string[] => {
-        if (!val) return [];
-        if (Array.isArray(val)) return val.filter(v => !!v && v.toString().trim()).map(v => v.toString().trim());
-        return val
-          .split(/\n|,/) // split by newline or comma
-          .map(v => v.trim())
-          .filter(v => !!v);
-      };
-
-      const sshKeysList = parseList(overrides.ssh_authorized_keys);
-      const packagesList = parseList(overrides.packages);
-
-      // Only include overrides that are set
-      if (overrides.default_user) vmData.default_user = overrides.default_user;
-      if (overrides.default_password) vmData.default_password = overrides.default_password;
-      if (sshKeysList.length) vmData.ssh_authorized_keys = sshKeysList;
-      if (overrides.ssh_pwauth !== null && overrides.ssh_pwauth !== undefined) vmData.ssh_pwauth = overrides.ssh_pwauth;
-      if (packagesList.length) vmData.packages = packagesList;
-      if (overrides.docker_compose_content) vmData.docker_compose_content = overrides.docker_compose_content;
-      if (overrides.docker_compose_path) vmData.docker_compose_path = overrides.docker_compose_path;
-      if (overrides.start_docker_compose !== null && overrides.start_docker_compose !== undefined) vmData.start_docker_compose = overrides.start_docker_compose;
-      if (overrides.timezone) vmData.timezone = overrides.timezone;
-      if (overrides.locale) vmData.locale = overrides.locale;
-
-      // Guest agent flags
-      if (this.cloudInitForm.value.enableGuestAgent) {
+      // Provisioning and cloud-init configuration
+      const provisioning = this.provisioningForm.value;
+      if (provisioning.cloudInitProfileId) {
+        vmData.cloud_init_profile_id = provisioning.cloudInitProfileId;
+      }
+      if (provisioning.enableGuestAgent) {
         vmData.enable_guest_agent = true;
       }
-      if (this.cloudInitForm.value.provisionViaGuestAgent) {
+      if (provisioning.provisionViaGuestAgent) {
         vmData.provision_via_guest_agent = true;
       }
-      
-      // Add IP pool assignment if enabled
-      if (this.cloudInitForm.value.autoAssignIP && this.cloudInitForm.value.ipPoolId) {
-        vmData.auto_assign_ip = true;
-        vmData.ip_pool_id = this.cloudInitForm.value.ipPoolId;
+      if (provisioning.defaultUser) {
+        vmData.default_user = provisioning.defaultUser;
+      }
+      if (provisioning.defaultPassword) {
+        vmData.default_password = provisioning.defaultPassword;
+      }
+
+      const sshKeys = (provisioning.sshAuthorizedKeys || '')
+        .split('\n')
+        .map((k: string) => k.trim())
+        .filter((k: string) => k.length);
+      if (sshKeys.length) {
+        vmData.ssh_authorized_keys = sshKeys;
+      }
+
+      if (provisioning.sshPwauth === false) {
+        vmData.ssh_pwauth = false;
+      }
+      if (provisioning.aptUpdate !== null && provisioning.aptUpdate !== undefined) {
+        vmData.apt_update = provisioning.aptUpdate;
+      }
+      if (provisioning.aptUpgrade !== null && provisioning.aptUpgrade !== undefined) {
+        vmData.apt_upgrade = provisioning.aptUpgrade;
+      }
+      if (provisioning.aptRebootIfRequired !== null && provisioning.aptRebootIfRequired !== undefined) {
+        vmData.apt_reboot_if_required = provisioning.aptRebootIfRequired;
+      }
+
+      const packages = (provisioning.packages || '')
+        .split('\n')
+        .map((p: string) => p.trim())
+        .filter((p: string) => p.length);
+      if (packages.length) {
+        vmData.packages = packages;
+      }
+
+      if (provisioning.dockerComposeContent) {
+        vmData.docker_compose_content = provisioning.dockerComposeContent;
+      }
+      if (provisioning.dockerComposePath) {
+        vmData.docker_compose_path = provisioning.dockerComposePath;
+      }
+      if (provisioning.startDockerCompose) {
+        vmData.start_docker_compose = true;
+      }
+      if (provisioning.timezone) {
+        vmData.timezone = provisioning.timezone;
+      }
+      if (provisioning.locale) {
+        vmData.locale = provisioning.locale;
       }
       
-      const result: any = await this.vmService.createVM(this.basicForm.value.nodeId, vmData);
+      await this.vmService.createVM(this.basicForm.value.nodeId, vmData);
       
-      let successMsg = 'VM created successfully';
-      if (result.assigned_ip) {
-        successMsg += ` with IP ${result.assigned_ip}`;
-      }
-      if (this.cloudInitForm.value.provisionViaGuestAgent) {
-        successMsg += ' and guest-agent provisioning started';
-      }
-      
-      this.snackBar.open(successMsg, 'Close', { duration: 5000 });
+      this.snackBar.open('VM created successfully', 'Close', { duration: 3000 });
       this.router.navigate(['/vms']);
     } catch (err: any) {
       this.error.set(err.error?.detail || 'Failed to create VM');
@@ -341,7 +301,7 @@ export class VmCreateComponent implements OnInit {
            this.resourceForm.valid && 
            this.storageForm.valid && 
            this.networkForm.valid &&
-           this.cloudInitForm.valid;
+           this.provisioningForm.valid;
   }
   
   cancel(): void {
