@@ -3,28 +3,41 @@ import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { MaterialModule } from '../../shared/material.module';
-import { CloudInitService, CloudInitProfile } from '../../core/services/cloud-init.service';
+import { ProvisioningService, ProvisioningProfile } from '../../core/services/provisioning.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { MatTabsModule } from '@angular/material/tabs';
 
 @Component({
-  selector: 'app-cloud-init-profiles',
+  selector: 'app-provisioning-profiles',
   standalone: true,
   imports: [CommonModule, FormsModule, ReactiveFormsModule, MaterialModule, MatTabsModule],
   template: `
     <div class="page-container">
       <div class="page-header">
-        <h1>Cloud-init Profiles</h1>
-        <p class="subtitle">Manage cloud-init provisioning profiles and per-VM overrides</p>
+        <h1>Provisioning Profiles</h1>
+        <p class="subtitle">Manage VM provisioning profiles using KVCloud Agent</p>
       </div>
+
+      <!-- Info Banner -->
+      <mat-card class="info-banner">
+        <mat-card-content>
+          <div class="banner-content">
+            <mat-icon class="info-icon">info</mat-icon>
+            <div>
+              <strong>Agent-Based Provisioning</strong>
+              <p>KVCloud uses an intelligent agent-based provisioning system. The kvcloud-agent runs on your VMs and automatically applies configurations including users, packages, Docker containers, network settings, and more. Profiles created here serve as base templates that can be customized per-VM.</p>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
 
       <mat-tab-group>
         <!-- Admin Profiles Tab -->
-        <mat-tab label="Admin Profiles">
+        <mat-tab label="Provisioning Profiles">
           <div class="tab-content">
             <div class="tab-intro">
-              <p><strong>Admin Profiles</strong> are base configurations created by admins. When creating VMs, users can select a profile and optionally override specific settings on a per-VM basis.</p>
+              <p><strong>Provisioning Profiles</strong> are reusable configurations applied by the KVCloud Agent. When creating VMs, select a profile and optionally override settings on a per-VM basis.</p>
             </div>
 
             <div class="list-actions">
@@ -91,7 +104,7 @@ import { MatTabsModule } from '@angular/material/tabs';
         <mat-tab label="Quick Create">
           <div class="tab-content">
             <div class="tab-intro">
-              <p><strong>Quick Create</strong> profile with essential settings. Use the Advanced Builder for more options.</p>
+              <p><strong>Quick Create</strong> a provisioning profile with essential settings. Use the Advanced Builder for more options.</p>
             </div>
 
             <form [formGroup]="quickForm" (ngSubmit)="createQuickProfile()" class="profile-form">
@@ -179,33 +192,34 @@ import { MatTabsModule } from '@angular/material/tabs';
           </div>
         </mat-tab>
 
-        <!-- Per-VM Overrides Guide Tab -->
-        <mat-tab label="Per-VM Overrides Guide">
+        <!-- How It Works Tab -->
+        <mat-tab label="How It Works">
           <div class="tab-content guide-content">
-            <h2>Combining Profiles with Per-VM Overrides</h2>
+            <h2>Agent-Based Provisioning System</h2>
             
             <mat-card>
               <mat-card-header>
-                <mat-card-title>Workflow</mat-card-title>
+                <mat-card-title><mat-icon>architecture</mat-icon> Overview</mat-card-title>
               </mat-card-header>
               <mat-card-content>
+                <p>KVCloud uses an intelligent agent-based provisioning system that reliably configures VMs even when network connectivity or guest services are intermittent.</p>
                 <ol>
-                  <li><strong>Admin creates profiles:</strong> Define base configurations in the Admin Profiles tab</li>
-                  <li><strong>User creates VM:</strong> Select an optional profile from the VM creation wizard</li>
-                  <li><strong>User adds overrides:</strong> The "Provisioning" step in VM creation allows users to override any per-VM setting (user, SSH keys, packages, etc.)</li>
-                  <li><strong>System merges configuration:</strong> Backend merges profile settings with per-VM overrides (per-VM overrides take precedence)</li>
-                  <li><strong>Cloud-init is applied:</strong> The merged configuration is written to the VM via cloud-init</li>
+                  <li><strong>Agent Installation:</strong> The kvcloud-agent is installed on VMs via QEMU Guest Agent during VM creation</li>
+                  <li><strong>Configuration Polling:</strong> The agent polls the KVCloud API every 60 seconds for pending provisioning tasks</li>
+                  <li><strong>Task Execution:</strong> When tasks are found, the agent executes them locally (users, packages, Docker, network, etc.)</li>
+                  <li><strong>Status Reporting:</strong> Results are reported back to the API, including success/failure and detailed logs</li>
+                  <li><strong>Persistence:</strong> The agent survives reboots and retries failed operations automatically</li>
                 </ol>
               </mat-card-content>
             </mat-card>
 
             <mat-card>
               <mat-card-header>
-                <mat-card-title>Example: Base Profile + Per-VM Overrides</mat-card-title>
+                <mat-card-title><mat-icon>merge_type</mat-icon> Profile Merging & Per-VM Overrides</mat-card-title>
               </mat-card-header>
               <mat-card-content>
                 <div class="example-box">
-                  <h4>Admin Profile: "Production Ubuntu"</h4>
+                  <h4>Base Profile: "Production Ubuntu"</h4>
                   <ul>
                     <li>Default user: ubuntu</li>
                     <li>SSH pwauth: enabled</li>
@@ -213,34 +227,28 @@ import { MatTabsModule } from '@angular/material/tabs';
                     <li>Packages: curl, git, htop, nginx</li>
                   </ul>
 
-                  <h4>User VM Creation: web-server-01</h4>
+                  <h4>VM Creation: web-server-01</h4>
                   <ul>
-                    <li>Selects: "Production Ubuntu" profile</li>
-                    <li>Overrides in Provisioning step:
+                    <li>Selected Profile: "Production Ubuntu"</li>
+                    <li>Per-VM Overrides:
                       <ul>
-                        <li>Default password: <em>different for this VM</em></li>
-                        <li>SSH keys: <em>team's public keys (added to profile's list)</em></li>
-                        <li>Additional packages: <em>postgresql, redis (merged with profile packages)</em></li>
+                        <li>Default password: <em>custom password</em></li>
+                        <li>SSH keys: <em>team's additional keys</em></li>
+                        <li>Additional packages: <em>postgresql, redis</em></li>
                       </ul>
                     </li>
                   </ul>
 
-                  <h4>Result</h4>
+                  <h4>Final Configuration Applied by Agent</h4>
                   <ul>
                     <li>Default user: ubuntu (from profile)</li>
-                    <li>SSH password: <em>VM-specific value</em> (override)</li>
-                    <li>SSH keys: <em>profile + VM team keys</em> (merged)</li>
+                    <li>Password: <em>custom password</em> (VM override)</li>
+                    <li>SSH keys: <em>profile keys + team keys</em> (merged)</li>
                     <li>Packages: curl, git, htop, nginx, postgresql, redis (merged)</li>
                   </ul>
                 </div>
-              </mat-card-content>
-            </mat-card>
 
-            <mat-card>
-              <mat-card-header>
-                <mat-card-title>Merge Behavior</mat-card-title>
-              </mat-card-header>
-              <mat-card-content>
+                <h4>Merge Rules</h4>
                 <table class="behavior-table">
                   <tr>
                     <th>Field Type</th>
@@ -248,16 +256,48 @@ import { MatTabsModule } from '@angular/material/tabs';
                     <th>Example</th>
                   </tr>
                   <tr>
-                    <td><strong>Scalar (String, Number, Bool)</strong></td>
-                    <td>Per-VM override replaces profile value</td>
+                    <td><strong>Scalar Values</strong></td>
+                    <td>VM override replaces profile value</td>
                     <td>default_user, timezone, ssh_pwauth</td>
                   </tr>
                   <tr>
-                    <td><strong>List (Packages, SSH Keys)</strong></td>
-                    <td>Per-VM items added to profile list (no duplicates)</td>
-                    <td>["nginx", "curl"] + ["redis"] = ["nginx", "curl", "redis"]</td>
+                    <td><strong>Lists</strong></td>
+                    <td>VM items are added to profile list (no duplicates)</td>
+                    <td>packages, ssh_authorized_keys</td>
                   </tr>
                 </table>
+              </mat-card-content>
+            </mat-card>
+
+            <mat-card>
+              <mat-card-header>
+                <mat-card-title><mat-icon>power_settings_new</mat-icon> What the Agent Can Do</mat-card-title>
+              </mat-card-header>
+              <mat-card-content>
+                <ul>
+                  <li><strong>User Management:</strong> Create users, set passwords, configure sudo access, SSH keys</li>
+                  <li><strong>Package Management:</strong> Install packages via apt, configure repositories</li>
+                  <li><strong>Docker:</strong> Install Docker, configure registry authentication, deploy Docker Compose stacks</li>
+                  <li><strong>Network:</strong> Configure static IPs, DNS, hostnames via netplan</li>
+                  <li><strong>System:</strong> Set timezone, locale, expand root filesystem after disk resize</li>
+                  <li><strong>Persistence:</strong> Survives reboots, retries failed operations, reports detailed logs</li>
+                </ul>
+              </mat-card-content>
+            </mat-card>
+
+            <mat-card>
+              <mat-card-header>
+                <mat-card-title><mat-icon>bug_report</mat-icon> Troubleshooting</mat-card-title>
+              </mat-card-header>
+              <mat-card-content>
+                <p>If provisioning fails or doesn't apply:</p>
+                <ul>
+                  <li>Check VM has QEMU Guest Agent installed and running</li>
+                  <li>Verify kvcloud-agent service is active: <code>systemctl status kvcloud-agent</code></li>
+                  <li>View agent logs: <code>journalctl -u kvcloud-agent -n 50</code> or <code>/var/log/kvcloud-agent.log</code></li>
+                  <li>Ensure VM can reach KVCloud API (network connectivity)</li>
+                  <li>Trigger manual provisioning from VM details page</li>
+                </ul>
               </mat-card-content>
             </mat-card>
           </div>
@@ -270,6 +310,14 @@ import { MatTabsModule } from '@angular/material/tabs';
     .page-header { margin-bottom: 24px; }
     .page-header h1 { margin: 0 0 8px 0; }
     .page-header .subtitle { color: #666; margin: 0; }
+    
+    .info-banner { margin-bottom: 24px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+    .info-banner mat-card-content { padding: 16px; }
+    .banner-content { display: flex; align-items: flex-start; gap: 16px; }
+    .banner-content .info-icon { font-size: 32px; width: 32px; height: 32px; flex-shrink: 0; }
+    .banner-content strong { display: block; margin-bottom: 4px; font-size: 16px; }
+    .banner-content p { margin: 0; opacity: 0.95; line-height: 1.5; }
+    
     .tab-content { padding: 24px; }
     .tab-intro { background: #f5f5f5; padding: 16px; border-radius: 4px; margin-bottom: 24px; }
     .tab-intro p { margin: 0; color: #666; }
@@ -285,8 +333,17 @@ import { MatTabsModule } from '@angular/material/tabs';
     h3 { margin-top: 24px; margin-bottom: 16px; }
 
     .guide-content { max-width: 900px; margin: 0 auto; }
+    .guide-content h2 { margin-bottom: 24px; color: #333; }
+    .guide-content mat-card { margin-bottom: 24px; }
+    .guide-content mat-card-header { background: #f5f5f5; padding: 16px; }
+    .guide-content mat-card-title { display: flex; align-items: center; gap: 8px; font-size: 18px; }
+    .guide-content mat-card-title mat-icon { color: #1976d2; }
+    .guide-content mat-card-content { padding: 20px; }
+    .guide-content ul { line-height: 1.8; }
+    .guide-content code { background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
+    
     .example-box { background: #f9f9f9; padding: 16px; border-left: 4px solid #1976d2; border-radius: 4px; margin: 16px 0; }
-    .example-box h4 { margin-top: 12px; }
+    .example-box h4 { margin-top: 12px; color: #1976d2; }
     .example-box ul { margin: 8px 0; }
     .behavior-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
     .behavior-table th, .behavior-table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
@@ -294,13 +351,13 @@ import { MatTabsModule } from '@angular/material/tabs';
     .behavior-table tr:last-child td { border-bottom: none; }
   `]
 })
-export class CloudInitProfilesComponent implements OnInit {
-  profiles = signal<CloudInitProfile[]>([]);
+export class ProvisioningProfilesComponent implements OnInit {
+  profiles = signal<ProvisioningProfile[]>([]);
   displayedColumns = ['name', 'features', 'actions'];
   quickForm!: FormGroup;
 
   constructor(
-    private cloudInitService: CloudInitService,
+    private provisioningService: ProvisioningService,
     private snackBar: MatSnackBar,
     private router: Router,
     private fb: FormBuilder
@@ -333,7 +390,7 @@ export class CloudInitProfilesComponent implements OnInit {
   }
 
   private loadProfiles(): void {
-    this.cloudInitService.listProfiles().subscribe({
+    this.provisioningService.listProfiles().subscribe({
       next: (res) => {
         this.profiles.set(res.profiles || []);
       },
@@ -360,7 +417,7 @@ export class CloudInitProfilesComponent implements OnInit {
       .map((k: string) => k.trim())
       .filter((k: string) => k);
 
-    const profile: CloudInitProfile = {
+    const profile: ProvisioningProfile = {
       name: formValue.name,
       description: formValue.description,
       default_user: formValue.default_user,
@@ -379,7 +436,7 @@ export class CloudInitProfilesComponent implements OnInit {
       start_docker_compose: formValue.start_docker_compose
     };
 
-    this.cloudInitService.createProfile(profile).subscribe({
+    this.provisioningService.createProfile(profile).subscribe({
       next: () => {
         this.snackBar.open('Profile created successfully', 'Close', { duration: 3000 });
         this.resetQuickForm();
@@ -391,14 +448,14 @@ export class CloudInitProfilesComponent implements OnInit {
     });
   }
 
-  editProfile(profile: CloudInitProfile): void {
-    this.router.navigate(['/cloud-init/builder'], { queryParams: { id: profile.id } });
+  editProfile(profile: ProvisioningProfile): void {
+    this.router.navigate(['/provisioning/builder'], { queryParams: { id: profile.id } });
   }
 
   deleteProfile(id: number | undefined): void {
     if (!id) return;
     if (confirm('Are you sure you want to delete this profile?')) {
-      this.cloudInitService.deleteProfile(id).subscribe({
+      this.provisioningService.deleteProfile(id).subscribe({
         next: () => {
           this.snackBar.open('Profile deleted', 'Close', { duration: 3000 });
           this.loadProfiles();
@@ -411,7 +468,7 @@ export class CloudInitProfilesComponent implements OnInit {
   }
 
   openProfileBuilder(): void {
-    this.router.navigate(['/cloud-init/builder']);
+    this.router.navigate(['/provisioning/builder']);
   }
 
   resetQuickForm(): void {

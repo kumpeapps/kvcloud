@@ -9,6 +9,43 @@
   @media (max-width: 1200px) {
     grid-template-columns: 1fr;
   }
+
+  .info-banner {
+    grid-column: 1 / -1;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    margin-bottom: 0;
+
+    mat-card-content {
+      padding: 16px;
+    }
+
+    .banner-content {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+
+      .info-icon {
+        font-size: 32px;
+        width: 32px;
+        height: 32px;
+        flex-shrink: 0;
+      }
+
+      strong {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 16px;
+      }
+
+      p {
+        margin: 0;
+        opacity: 0.95;
+        line-height: 1.5;
+        color: white;
+      }
+    }
+  }
 }
 
 .tab-content {

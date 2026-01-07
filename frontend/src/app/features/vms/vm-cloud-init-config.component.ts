@@ -7,7 +7,7 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { MatStepperModule } from '@angular/material/stepper';
 import { SshKeyService } from '../../core/services/ssh-key.service';
 import { VmUserService } from '../../core/services/vm-user.service';
-import { CloudInitService } from '../../core/services/cloud-init.service';
+import { ProvisioningService } from '../../core/services/provisioning.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
@@ -320,7 +320,7 @@ export class VmCloudInitConfigComponent implements OnInit {
     @Inject(MAT_DIALOG_DATA) public data: any,
     private sshKeyService: SshKeyService,
     private vmUserService: VmUserService,
-    private cloudInitService: CloudInitService,
+    private provisioningService: ProvisioningService,
     private snackBar: MatSnackBar,
     private http: HttpClient
   ) {}

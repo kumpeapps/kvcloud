@@ -14,11 +14,11 @@ import { MatExpansionModule } from '@angular/material/expansion';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialogModule, MatDialog } from '@angular/material/dialog';
-import { CloudInitService, CloudInitProfile, CloudInitVariables, CloudInitVariable } from '../../core/services/cloud-init.service';
+import { ProvisioningService, ProvisioningProfile, ProvisioningVariables, ProvisioningVariable } from '../../core/services/provisioning.service';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
 @Component({
-  selector: 'app-cloud-init-profile-builder',
+  selector: 'app-provisioning-profile-builder',
   standalone: true,
   imports: [
     CommonModule,
@@ -37,12 +37,12 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
     MatDialogModule,
     MatSnackBarModule
   ],
-  templateUrl: './cloud-init-profile-builder.component.html',
-  styleUrl: './cloud-init-profile-builder.component.scss'
+  templateUrl: './provisioning-profile-builder.component.html',
+  styleUrl: './provisioning-profile-builder.component.scss'
 })
-export class CloudInitProfileBuilderComponent implements OnInit {
+export class ProvisioningProfileBuilderComponent implements OnInit {
   profileForm!: FormGroup;
-  variables: CloudInitVariables | null = null;
+  variables: ProvisioningVariables | null = null;
   previewYaml: string = '';
   showPreview = false;
   editingProfileId: number | null = null;
@@ -60,7 +60,7 @@ export class CloudInitProfileBuilderComponent implements OnInit {
 
   constructor(
     private fb: FormBuilder,
-    private cloudInitService: CloudInitService,
+    private provisioningService: ProvisioningService,
     private snackBar: MatSnackBar,
     private dialog: MatDialog,
     private route: ActivatedRoute,
@@ -86,7 +86,7 @@ export class CloudInitProfileBuilderComponent implements OnInit {
   }
 
   loadProfile(id: number) {
-    this.cloudInitService.getProfile(id).subscribe({
+    this.provisioningService.getProfile(id).subscribe({
       next: (profile: any) => {
         // Convert arrays to newline-separated strings for the form
         this.profileForm.patchValue({
@@ -99,7 +99,7 @@ export class CloudInitProfileBuilderComponent implements OnInit {
       },
       error: (err: any) => {
         this.snackBar.open('Failed to load profile: ' + (err.error?.detail || 'Unknown error'), 'Close', { duration: 5000 });
-        this.router.navigate(['/cloud-init/profiles']);
+        this.router.navigate(['/provisioning/profiles']);
       }
     });
   }
@@ -149,8 +149,8 @@ export class CloudInitProfileBuilderComponent implements OnInit {
   }
 
   loadVariables() {
-    this.cloudInitService.getVariables().subscribe({
-      next: (vars: CloudInitVariables) => {
+    this.provisioningService.getVariables().subscribe({
+      next: (vars: ProvisioningVariables) => {
         this.variables = vars;
       },
       error: (err: any) => {
@@ -161,8 +161,8 @@ export class CloudInitProfileBuilderComponent implements OnInit {
 
   get allVariables(): string[] {
     if (!this.variables) return [];
-    const userVars = this.variables.user_variables.map((v: CloudInitVariable) => `\${${v.name}}`);
-    const vmVars = this.variables.vm_variables.map((v: CloudInitVariable) => `\${${v.name}}`);
+    const userVars = this.variables.user_variables.map((v: ProvisioningVariable) => `\${${v.name}}`);
+    const vmVars = this.variables.vm_variables.map((v: ProvisioningVariable) => `\${${v.name}}`);
     return [...userVars, ...vmVars];
   }
 
@@ -178,7 +178,7 @@ export class CloudInitProfileBuilderComponent implements OnInit {
     const formValue = this.profileForm.value;
     
     // Parse array fields
-    const profile: CloudInitProfile = {
+    const profile: any = {
       ...formValue,
       packages: formValue.packages ? formValue.packages.split('\n').filter((p: string) => p.trim()) : [],
       bootcmd: formValue.bootcmd ? formValue.bootcmd.split('\n').filter((c: string) => c.trim()) : [],
@@ -186,7 +186,7 @@ export class CloudInitProfileBuilderComponent implements OnInit {
       ssh_authorized_keys: formValue.ssh_authorized_keys ? formValue.ssh_authorized_keys.split('\n').filter((k: string) => k.trim()) : [],
     };
 
-    this.cloudInitService.previewProfile(profile).subscribe({
+    this.provisioningService.previewProfile(profile).subscribe({
       next: (result: any) => {
         this.previewYaml = result.yaml;
         this.showPreview = true;
@@ -204,7 +204,7 @@ export class CloudInitProfileBuilderComponent implements OnInit {
     }
 
     const formValue = this.profileForm.value;
-    const profile: CloudInitProfile = {
+    const profile: any = {
       ...formValue,
       packages: formValue.packages ? formValue.packages.split('\n').filter((p: string) => p.trim()) : [],
       bootcmd: formValue.bootcmd ? formValue.bootcmd.split('\n').filter((c: string) => c.trim()) : [],
@@ -214,10 +214,10 @@ export class CloudInitProfileBuilderComponent implements OnInit {
 
     if (this.isEditMode && this.editingProfileId) {
       // Update existing profile
-      this.cloudInitService.updateProfile(this.editingProfileId, profile).subscribe({
+      this.provisioningService.updateProfile(this.editingProfileId, profile).subscribe({
         next: (): void => {
           this.snackBar.open('Profile updated successfully', 'Close', { duration: 3000 });
-          this.router.navigate(['/cloud-init/profiles']);
+          this.router.navigate(['/provisioning/profiles']);
         },
         error: (err: any) => {
           this.snackBar.open('Update failed: ' + (err.error?.detail || 'Unknown error'), 'Close', { duration: 5000 });
@@ -225,7 +225,7 @@ export class CloudInitProfileBuilderComponent implements OnInit {
       });
     } else {
       // Create new profile
-      this.cloudInitService.createProfile(profile).subscribe({
+      this.provisioningService.createProfile(profile).subscribe({
         next: (): void => {
           this.snackBar.open('Profile created successfully', 'Close', { duration: 3000 });
           this.profileForm.reset();

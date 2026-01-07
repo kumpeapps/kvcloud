@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MaterialModule } from '../../shared/material.module';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { CloudInitService } from '../../core/services/cloud-init.service';
+import { ProvisioningService } from '../../core/services/provisioning.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
@@ -106,7 +106,7 @@ export class VmCloudInitApplyDialogComponent implements OnInit {
   constructor(
     @Inject(MAT_DIALOG_DATA) public data: { nodeId: number; vmid: number },
     public dialogRef: MatDialogRef<VmCloudInitApplyDialogComponent>,
-    private cloudInit: CloudInitService,
+    private provisioningService: ProvisioningService,
     private snackBar: MatSnackBar,
     private http: HttpClient
   ) {}
@@ -117,8 +117,8 @@ export class VmCloudInitApplyDialogComponent implements OnInit {
   }
 
   loadProfiles(): void {
-    this.cloudInit.listProfiles().subscribe({
-      next: (res) => this.profiles = res.profiles || [],
+    this.provisioningService.listProfiles().subscribe({
+      next: (res: any) => this.profiles = res.profiles || [],
       error: () => this.snackBar.open('Failed to load profiles', 'Close', { duration: 3000 })
     });
   }
@@ -152,12 +152,12 @@ export class VmCloudInitApplyDialogComponent implements OnInit {
     if (!p) return;
     const payload: any = { node_id: this.data.nodeId, vmid: this.data.vmid };
     ['ciuser','cipassword','sshkeys'].forEach(k => { if (p[k]) payload[k] = p[k]; });
-    this.cloudInit.apply(payload).subscribe({
+    this.provisioningService.apply(payload).subscribe({
       next: () => {
         this.snackBar.open('Cloud-init applied', 'Close', { duration: 3000 });
         this.dialogRef.close(true);
       },
-      error: (err) => {
+      error: (err: any) => {
         this.snackBar.open(err.error?.detail || 'Failed to apply cloud-init', 'Close', { duration: 4000 });
       }
     });

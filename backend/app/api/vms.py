@@ -2102,12 +2102,8 @@ async def queue_provision_for_agent(
         config['docker_registry_password'] = req.docker_registry_password
         config['install_docker'] = True
     
-    # Add network config if requested
-    if req.write_network:
-        vm_net = await _resolve_vm_network_config(db, vmid)
-        if vm_net and (vm_net.get('enable_dhcp') or vm_net.get('ip_address')):
-            network_block = _build_default_network_block(vm_net)
-            config['network_yaml'] = yaml.dump(network_block, default_flow_style=False)
+    # Network config removed from agent provisioning - cloud-init handles primary NIC
+    # If you need secondary/additional NICs, manually add network_yaml to the config
     
     # Set pending provision
     assignment.set_pending_provision(config)

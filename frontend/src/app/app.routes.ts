@@ -93,12 +93,27 @@ export const routes: Routes = [
         loadComponent: () => import('./features/plans/plans-manager.component').then(m => m.PlansManagerComponent)
       },
       {
+        path: 'provisioning/profiles',
+        loadComponent: () => import('./features/provisioning/provisioning-profiles.component').then(m => m.ProvisioningProfilesComponent)
+      },
+      {
+        path: 'provisioning/builder',
+        loadComponent: () => import('./features/provisioning/provisioning-profile-builder.component').then(m => m.ProvisioningProfileBuilderComponent)
+      },
+      {
+        path: 'compose-templates',
+        loadComponent: () => import('./features/compose-templates/compose-templates.component').then(m => m.ComposeTemplatesComponent)
+      },
+      // Legacy redirects
+      {
         path: 'cloud-init/profiles',
-        loadComponent: () => import('./features/cloud-init/cloud-init-profiles.component').then(m => m.CloudInitProfilesComponent)
+        redirectTo: 'provisioning/profiles',
+        pathMatch: 'full'
       },
       {
         path: 'cloud-init/builder',
-        loadComponent: () => import('./features/cloud-init/cloud-init-profile-builder.component').then(m => m.CloudInitProfileBuilderComponent)
+        redirectTo: 'provisioning/builder',
+        pathMatch: 'full'
       },
       {
         path: 'ssh-keys',

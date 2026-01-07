@@ -161,10 +161,12 @@ def execute_provision(provision_data):
         if not success:
             failed_steps.append('hostname')
     
-    # 2. Configure network
+    # 2. Configure network (ONLY if explicitly provided - for secondary NICs)
+    # Primary NIC is handled by cloud-init ipconfig0; agent should not touch it
     if config.get('network_yaml'):
+        logger.info("network_yaml provided - applying additional/secondary network config")
         network_yaml = config['network_yaml']
-        netplan_file = "/etc/netplan/50-cloud-init.yaml"
+        netplan_file = "/etc/netplan/60-kvcloud-agent.yaml"  # Use different file to avoid conflict with cloud-init
         
         try:
             with open(netplan_file, 'w') as f:
@@ -172,7 +174,7 @@ def execute_provision(provision_data):
             
             success, output = execute_command(
                 "netplan apply",
-                "Applying network configuration"
+                "Applying additional network configuration"
             )
             results.append({'step': 'network', 'success': success, 'output': output})
             if not success:
@@ -181,6 +183,8 @@ def execute_provision(provision_data):
             logger.error(f"Failed to write netplan config: {e}")
             results.append({'step': 'network', 'success': False, 'output': str(e)})
             failed_steps.append('network')
+    else:
+        logger.info("No network_yaml in config - primary NIC handled by cloud-init")
     
     # 3. Create/update user
     if config.get('default_user'):
@@ -318,8 +322,12 @@ def execute_provision(provision_data):
         try:
             if isinstance(state, dict) and isinstance(state.get('compose_services'), dict):
                 compose_services = dict(state.get('compose_services'))
+            else:
+                compose_services = {}
+            compose_hashes = state.get('compose_hashes', {}) if isinstance(state, dict) else {}
         except Exception:
             compose_services = {}
+            compose_hashes = {}
 
         desired_services = {}
         for compose in config['docker_compose_files']:
@@ -350,12 +358,37 @@ def execute_provision(provision_data):
             start_on_boot = bool(compose.get('start_on_boot'))
             logger.info(f"Processing compose file: {path} (start_flag: {start_flag}, start_on_boot: {start_on_boot})")
 
+            cid = compose.get('id') or f"path:{path}"
+            old_hash = None
+            if isinstance(compose_hashes, dict):
+                old_hash = compose_hashes.get(cid)
+            # Write file and compute new hash
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, 'w') as f:
                 f.write(content)
+            new_hash = None
+            try:
+                import hashlib
+                new_hash = hashlib.sha256(content.encode('utf-8')).hexdigest()
+                if isinstance(state, dict):
+                    if 'compose_hashes' not in state:
+                        state['compose_hashes'] = {}
+                    state['compose_hashes'][cid] = new_hash
+            except Exception as e:
+                logger.error(f"Failed to hash compose content: {e}")
+
             logger.info(f"Wrote docker-compose file to {path}")
 
-            if start_flag:
+            should_restart = start_flag or start_on_boot or (cid in compose_services)
+            if should_restart and old_hash and new_hash and old_hash != new_hash:
+                compose_dir = os.path.dirname(path) or "/root"
+                compose_file = os.path.basename(path)
+                execute_command(
+                    f"cd '{compose_dir}' && docker compose -f {compose_file} down || docker-compose -f {compose_file} down || true",
+                    f"Stopping docker-compose before update: {path}"
+                )
+
+            if should_restart:
                 execute_command("systemctl is-active docker || systemctl start docker", "Ensure docker is running")
                 compose_dir = os.path.dirname(path) or "/root"
                 compose_file = os.path.basename(path)
@@ -481,6 +514,29 @@ def report_completion(config, provision_id, result):
         return False
 
 
+def wait_for_connectivity(config, max_wait=120):
+    """Wait for network connectivity before polling API."""
+    logger.info("Waiting for network connectivity...")
+    start = time.time()
+    while time.time() - start < max_wait:
+        try:
+            # Try to reach the API server
+            response = requests.get(f"{config['api_url']}/health", timeout=5)
+            if response.status_code in [200, 404]:  # 404 is OK, means server is reachable
+                logger.info("✓ Network connectivity established")
+                return True
+        except:
+            pass
+        # Also check for default route as fallback
+        result = subprocess.run("ip route | grep default", shell=True, capture_output=True)
+        if result.returncode == 0:
+            logger.info("✓ Default route present, assuming connectivity")
+            return True
+        time.sleep(5)
+    logger.warning(f"Network connectivity not confirmed after {max_wait}s, proceeding anyway")
+    return False
+
+
 def main():
     """Main agent loop."""
     logger.info("KVCloud Agent starting...")
@@ -488,6 +544,9 @@ def main():
     # Load configuration
     config = load_config()
     logger.info(f"Loaded config for VM {config['vmid']} on node {config['node_id']}")
+    
+    # Wait for network before first poll
+    wait_for_connectivity(config)
     
     # Main loop
     while True:

@@ -6,7 +6,7 @@ import { MaterialModule } from '../../../shared/material.module';
 import { VMService, VMCreateData } from '../../../core/services/vm.service';
 import { ClusterService, ClusterNode } from '../../../core/services/cluster.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { CloudInitService, CloudInitProfile } from '../../../core/services/cloud-init.service';
+import { ProvisioningService, ProvisioningProfile } from '../../../core/services/provisioning.service';
 
 @Component({
   selector: 'app-vm-create',
@@ -24,7 +24,7 @@ export class VmCreateComponent implements OnInit {
   templates = signal<any[]>([]);
   isos = signal<string[]>([]);
   storages = signal<any[]>([]);
-  cloudInitProfiles = signal<CloudInitProfile[]>([]);
+  cloudInitProfiles = signal<ProvisioningProfile[]>([]);
   loading = signal(false);
   error = signal<string | null>(null);
   
@@ -39,7 +39,7 @@ export class VmCreateComponent implements OnInit {
     private fb: FormBuilder,
     private vmService: VMService,
     private clusterService: ClusterService,
-    private cloudInitService: CloudInitService,
+    private provisioningService: ProvisioningService,
     private router: Router,
     private snackBar: MatSnackBar
   ) {
@@ -181,7 +181,7 @@ export class VmCreateComponent implements OnInit {
 
   private async loadCloudInitProfiles(): Promise<void> {
     try {
-      const response = await this.cloudInitService.listProfiles().toPromise();
+      const response = await this.provisioningService.listProfiles().toPromise();
       this.cloudInitProfiles.set(response?.profiles || []);
     } catch (err: any) {
       this.snackBar.open('Failed to load cloud-init profiles', 'Close', { duration: 3000 });

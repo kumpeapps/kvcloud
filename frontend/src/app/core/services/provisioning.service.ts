@@ -3,15 +3,15 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 
-export interface CloudInitVariable {
+export interface ProvisioningVariable {
   name: string;
   example: string;
   description: string;
 }
 
-export interface CloudInitVariables {
-  user_variables: CloudInitVariable[];
-  vm_variables: CloudInitVariable[];
+export interface ProvisioningVariables {
+  user_variables: ProvisioningVariable[];
+  vm_variables: ProvisioningVariable[];
   usage: string;
 }
 
@@ -28,7 +28,7 @@ export interface WriteFile {
   owner: string;
 }
 
-export interface CloudInitProfile {
+export interface ProvisioningProfile {
   id?: number;
   name: string;
   description?: string;
@@ -80,28 +80,28 @@ export interface CloudInitProfile {
 @Injectable({
   providedIn: 'root'
 })
-export class CloudInitService {
+export class ProvisioningService {
   private apiUrl = `${environment.apiUrl}/cloud-init`;
 
   constructor(private http: HttpClient) {}
 
-  getVariables(): Observable<CloudInitVariables> {
-    return this.http.get<CloudInitVariables>(`${this.apiUrl}/variables`);
+  getVariables(): Observable<ProvisioningVariables> {
+    return this.http.get<ProvisioningVariables>(`${this.apiUrl}/variables`);
   }
 
-  createProfile(profile: CloudInitProfile): Observable<any> {
+  createProfile(profile: ProvisioningProfile): Observable<any> {
     return this.http.post(`${this.apiUrl}/profiles`, profile);
   }
 
-  listProfiles(): Observable<{ profiles: CloudInitProfile[] }> {
-    return this.http.get<{ profiles: CloudInitProfile[] }>(`${this.apiUrl}/profiles`);
+  listProfiles(): Observable<{ profiles: ProvisioningProfile[] }> {
+    return this.http.get<{ profiles: ProvisioningProfile[] }>(`${this.apiUrl}/profiles`);
   }
 
-  getProfile(id: number): Observable<CloudInitProfile> {
-    return this.http.get<CloudInitProfile>(`${this.apiUrl}/profiles/${id}`);
+  getProfile(id: number): Observable<ProvisioningProfile> {
+    return this.http.get<ProvisioningProfile>(`${this.apiUrl}/profiles/${id}`);
   }
 
-  updateProfile(id: number, profile: CloudInitProfile): Observable<any> {
+  updateProfile(id: number, profile: ProvisioningProfile): Observable<any> {
     return this.http.put(`${this.apiUrl}/profiles/${id}`, profile);
   }
 
@@ -109,7 +109,7 @@ export class CloudInitService {
     return this.http.delete(`${this.apiUrl}/profiles/${id}`);
   }
 
-  previewProfile(profile: CloudInitProfile): Observable<{ yaml: string, variables: any }> {
+  previewProfile(profile: ProvisioningProfile): Observable<{ yaml: string, variables: any }> {
     return this.http.post<{ yaml: string, variables: any }>(`${this.apiUrl}/preview`, profile);
   }
 

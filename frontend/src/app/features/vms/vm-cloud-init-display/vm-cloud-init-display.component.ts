@@ -22,6 +22,15 @@ interface CloudInitProfileListItem {
   name: string;
 }
 
+interface ComposeTemplate {
+  id?: number;
+  name: string;
+  description?: string;
+  content: string;
+  variables?: Array<{ name: string; description?: string; default?: any }>;
+  auto_update?: boolean;
+}
+
 @Component({
   selector: 'app-vm-cloud-init-display',
   standalone: true,
@@ -183,7 +192,7 @@ interface CloudInitProfileListItem {
                   <span class="config-label">Add From Template</span>
                   <mat-form-field appearance="outline">
                     <mat-label>Select template</mat-label>
-                    <mat-select [(ngModel)]="selectedTemplateId">
+                    <mat-select [(ngModel)]="selectedTemplateId" (selectionChange)="onTemplateChange()">
                       <mat-option [value]="null">None</mat-option>
                       <mat-option *ngFor="let tpl of composeTemplates" [value]="tpl.id">{{ tpl.name }}</mat-option>
                     </mat-select>
@@ -192,9 +201,21 @@ interface CloudInitProfileListItem {
                     <mat-label>Service name</mat-label>
                     <input matInput [(ngModel)]="newCompose.service_name" placeholder="e.g. web, api" required>
                   </mat-form-field>
-                  <textarea matInput rows="4" [(ngModel)]="templateVarsText" placeholder='{"project":"demo"}'>
-                  </textarea>
-                  <small>Provide JSON for template variables.</small>
+                  <ng-container *ngIf="selectedTemplateMeta as tpl; else selectTemplatePrompt">
+                    <div *ngIf="tpl.variables?.length; else noTemplateVars" class="config-grid">
+                      <div class="config-item" *ngFor="let v of tpl.variables">
+                        <span class="config-label">{{ v.name }}</span>
+                        <input matInput [(ngModel)]="templateVariableValues[v.name]" [placeholder]="v.default || ''">
+                        <small>{{ v.description || 'Optional' }}<ng-container *ngIf="v.default"> (default: {{ v.default }})</ng-container></small>
+                      </div>
+                    </div>
+                    <ng-template #noTemplateVars>
+                      <small>This template has no variables.</small>
+                    </ng-template>
+                  </ng-container>
+                  <ng-template #selectTemplatePrompt>
+                    <small>Select a template to configure variables.</small>
+                  </ng-template>
                   <div style="display:flex; gap:12px; flex-wrap: wrap; align-items:center;">
                     <mat-checkbox [(ngModel)]="newCompose.start_on_deploy">Start on deploy</mat-checkbox>
                     <mat-checkbox [(ngModel)]="newCompose.start_on_boot">Start on boot</mat-checkbox>
@@ -603,7 +624,7 @@ export class VmCloudInitDisplayComponent implements OnInit {
   pendingProvisionConfig: any = null;
 
   // Compose templates/files
-  composeTemplates: any[] = [];
+  composeTemplates: ComposeTemplate[] = [];
   composeFiles: any[] = [];
   newCompose: any = {
     path: '/root/docker-compose.yml',
@@ -614,7 +635,7 @@ export class VmCloudInitDisplayComponent implements OnInit {
     update_on_template_update: false
   };
   selectedTemplateId: number | null = null;
-  templateVarsText: string = '{}';
+  templateVariableValues: Record<string, any> = {};
 
   constructor(
     private http: HttpClient,
@@ -899,10 +920,42 @@ export class VmCloudInitDisplayComponent implements OnInit {
     }
   }
 
+  get selectedTemplateMeta(): ComposeTemplate | undefined {
+    return this.composeTemplates.find(t => t.id === this.selectedTemplateId);
+  }
+
+  private buildVariableValues(vars: Array<{ name: string; default?: any }> | undefined, existing?: Record<string, any>): Record<string, any> {
+    if (!vars?.length) return {};
+    const values: Record<string, any> = {};
+    vars.forEach(v => {
+      const key = v.name;
+      const existingVal = existing?.[key];
+      values[key] = existingVal !== undefined ? existingVal : (v.default ?? '');
+    });
+    return values;
+  }
+
+  private renderTemplateContent(content: string, variables: Record<string, any>): string {
+    if (!content) return content;
+    try {
+      return content.replace(/\{(\w+)\}/g, (_match, key) => (variables[key] !== undefined ? variables[key] : `{${key}}`));
+    } catch {
+      return content;
+    }
+  }
+
+  onTemplateChange(): void {
+    const tpl = this.selectedTemplateMeta;
+    this.templateVariableValues = this.buildVariableValues(tpl?.variables, this.templateVariableValues);
+  }
+
   loadComposeTemplates(): void {
     this.http.get<any[]>(`${environment.apiUrl}/vms/compose-templates`).subscribe({
       next: (resp: any) => {
         this.composeTemplates = resp || [];
+        if (this.selectedTemplateId) {
+          this.onTemplateChange();
+        }
       },
       error: (err) => {
         console.error('Failed to load compose templates', err);
@@ -945,15 +998,6 @@ export class VmCloudInitDisplayComponent implements OnInit {
     });
   }
 
-  private parseTemplateVars(): any {
-    try {
-      return this.templateVarsText ? JSON.parse(this.templateVarsText) : {};
-    } catch (e) {
-      this.snackBar.open('Invalid JSON for template variables', 'Close', { duration: 4000 });
-      return null;
-    }
-  }
-
   addComposeFromTemplate(): void {
     if (!this.selectedTemplateId) {
       this.snackBar.open('Select a template first', 'Close', { duration: 3000 });
@@ -963,8 +1007,8 @@ export class VmCloudInitDisplayComponent implements OnInit {
       this.snackBar.open('Service name is required', 'Close', { duration: 3000 });
       return;
     }
-    const vars = this.parseTemplateVars();
-    if (vars === null) return;
+    const tpl = this.selectedTemplateMeta;
+    const vars = this.buildVariableValues(tpl?.variables, this.templateVariableValues);
     const url = `${environment.apiUrl}/vms/${this.nodeId}/${this.vmid}/compose-from-template`;
     const payload = {
       template_id: this.selectedTemplateId,
@@ -1012,6 +1056,8 @@ export class VmCloudInitDisplayComponent implements OnInit {
       this.snackBar.open('Missing compose id; refresh and try again', 'Close', { duration: 3000 });
       return;
     }
+    const template = entry?.template_id ? this.composeTemplates.find(t => t.id === entry.template_id) : undefined;
+    const variables = template ? this.buildVariableValues(template.variables, entry.variables || {}) : (entry.variables || {});
     const dialogRef = this.dialog.open(VmComposeEditDialogComponent, {
       width: '800px',
       data: {
@@ -1021,19 +1067,30 @@ export class VmCloudInitDisplayComponent implements OnInit {
         content: entry.content,
         start_on_deploy: !!entry.start_on_deploy,
         start_on_boot: !!entry.start_on_boot,
-        update_on_template_update: !!entry.update_on_template_update
+        update_on_template_update: !!entry.update_on_template_update,
+        template_id: entry.template_id,
+        template_name: template?.name,
+        template_content: template?.content,
+        template_variables: template?.variables || [],
+        variables
       }
     });
     dialogRef.afterClosed().subscribe(result => {
       if (!result) return; // cancelled
       const url = `${environment.apiUrl}/vms/${this.nodeId}/${this.vmid}/compose-files/${entry.id}`;
+      const variablesPayload = result.variables || {};
+      const content = result.template_id && result.template_content
+        ? this.renderTemplateContent(result.template_content, variablesPayload)
+        : result.content;
       const updateData = {
         path: result.path,
         service_name: result.service_name,
-        content: result.content,
+        content,
         start_on_deploy: !!result.start_on_deploy,
         start_on_boot: !!result.start_on_boot,
-        update_on_template_update: !!result.update_on_template_update
+        update_on_template_update: !!result.update_on_template_update,
+        template_id: result.template_id || null,
+        variables: variablesPayload
       };
       this.http.put<any>(url, updateData).subscribe({
         next: () => {

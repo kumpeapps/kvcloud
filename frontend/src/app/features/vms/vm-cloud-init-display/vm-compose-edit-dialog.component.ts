@@ -12,6 +12,11 @@ export interface VmComposeEditData {
   start_on_deploy: boolean;
   start_on_boot: boolean;
   update_on_template_update?: boolean;
+  template_id?: number;
+  template_name?: string;
+  template_content?: string;
+  template_variables?: Array<{ name: string; description?: string; default?: any }>;
+  variables: Record<string, any>;
 }
 
 @Component({
@@ -32,6 +37,17 @@ export interface VmComposeEditData {
           <mat-label>Path</mat-label>
           <input matInput [(ngModel)]="data.path" required placeholder="/root/docker-compose.yml">
         </mat-form-field>
+
+        <div *ngIf="data.template_id && data.template_variables?.length" class="vars-section">
+          <h3>Template Variables<span *ngIf="data.template_name"> — {{ data.template_name }}</span></h3>
+          <div class="var-grid">
+            <mat-form-field appearance="outline" class="full-width" *ngFor="let v of data.template_variables">
+              <mat-label>{{ v.name }}</mat-label>
+              <input matInput [(ngModel)]="data.variables[v.name]" [placeholder]="v.default || ''">
+              <mat-hint>{{ v.description || 'Optional' }}<ng-container *ngIf="v.default"> (default: {{ v.default }})</ng-container></mat-hint>
+            </mat-form-field>
+          </div>
+        </div>
 
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>Compose content (YAML)</mat-label>
@@ -55,19 +71,47 @@ export interface VmComposeEditData {
     .form-grid { display: flex; flex-direction: column; gap: 16px; min-width: 700px; }
     .full-width { width: 100%; }
     .switches { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+    .vars-section { display: flex; flex-direction: column; gap: 8px; }
+    .vars-section h3 { margin: 0; font-size: 15px; font-weight: 600; }
+    .var-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
   `]
 })
 export class VmComposeEditDialogComponent {
   constructor(
     public dialogRef: MatDialogRef<VmComposeEditDialogComponent, VmComposeEditData | undefined>,
     @Inject(MAT_DIALOG_DATA) public data: VmComposeEditData
-  ) {}
+  ) {
+    this.data.variables = this.initializeVariables(this.data.template_variables, this.data.variables || {});
+  }
+
+  private initializeVariables(vars?: Array<{ name: string; default?: any }>, existing?: Record<string, any>): Record<string, any> {
+    if (!vars?.length) return existing || {};
+    const values: Record<string, any> = { ...(existing || {}) };
+    vars.forEach(v => {
+      if (values[v.name] === undefined) {
+        values[v.name] = v.default ?? '';
+      }
+    });
+    return values;
+  }
 
   onCancel(): void {
     this.dialogRef.close();
   }
 
   onSave(): void {
+    if (this.data.template_id && this.data.template_content) {
+      this.data.content = this.renderTemplateContent(this.data.template_content, this.data.variables || {});
+    }
     this.dialogRef.close(this.data);
+  }
+
+  private renderTemplateContent(content: string, variables: Record<string, any>): string {
+    if (!content) return content;
+    try {
+      return content.replace(/\{(\w+)\}/g, (_match, key) => (variables[key] !== undefined ? variables[key] : `{${key}}`));
+    } catch {
+      return content;
+    }
   }
 }
