@@ -124,7 +124,8 @@ export class VmsComponent implements OnInit {
 
     this.vmService.listVMs(nodeId).subscribe({
       next: (response) => {
-        this.vms.set(response.vms || []);
+        const visible = (response.vms || []).filter(vm => ![1, true, '1', 'true'].includes((vm as any).template));
+        this.vms.set(visible);
         this.loading.set(false);
       },
       error: (err) => {

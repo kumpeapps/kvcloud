@@ -47,18 +47,6 @@ export class DashboardComponent implements OnInit {
         console.error('Error loading dashboard stats:', err);
         this.error.set('Failed to load dashboard statistics');
         this.loading.set(false);
-        
-        // Fallback to mock data for development
-        this.stats.set({
-          vms: { total: 0, running: 0, stopped: 0 },
-          clusters: { total: 0, online: 0, offline: 0 },
-          resources: {
-            cpu: { usage: 0, total: 0 },
-            memory: { used: 0, total: 0 },
-            storage: { used: 0, total: 0 }
-          },
-          nodes: 0
-        });
       }
     });
   }

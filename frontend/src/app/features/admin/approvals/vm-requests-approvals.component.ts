@@ -86,9 +86,9 @@ import { VmRequestsService } from '../../../core/services/vm-requests.service';
     .header { display: flex; justify-content: space-between; gap: 16px; align-items: center; flex-wrap: wrap; }
     .controls { display: flex; gap: 12px; align-items: center; }
     .filter { width: 180px; }
-    .sub { color: rgba(0,0,0,0.6); font-size: 13px; margin-top: 4px; }
+    .sub { opacity: 0.6; font-size: 13px; margin-top: 4px; }
     .actions { display: flex; gap: 8px; justify-content: flex-end; }
-    .empty { padding: 12px; color: rgba(0,0,0,0.6); }
+    .empty { padding: 12px; opacity: 0.6; }
   `]
 })
 export class VmRequestsApprovalsComponent implements OnInit {

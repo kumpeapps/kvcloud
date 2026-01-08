@@ -149,7 +149,7 @@ import { EditNetworkInterfaceDialogComponent } from './edit-network-interface-di
     .no-data {
       text-align: center;
       padding: 40px;
-      color: #666;
+      opacity: 0.6;
     }
 
     .interfaces-table {
@@ -162,7 +162,7 @@ import { EditNetworkInterfaceDialogComponent } from './edit-network-interface-di
 
     code {
       font-family: 'Courier New', monospace;
-      background-color: #f5f5f5;
+      background-color: rgba(255, 255, 255, 0.05);
       padding: 2px 6px;
       border-radius: 3px;
       font-size: 0.9em;

@@ -4,7 +4,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: kvcloud-backend-dev
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --loop asyncio
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --loop asyncio --ssl-keyfile /etc/ssl/certs/kvcloud/server.key --ssl-certfile /etc/ssl/certs/kvcloud/server.crt
     ports:
       - "8000:8000"
     environment:
@@ -12,14 +12,18 @@ services:
       - SECRET_KEY=dev-secret-key
       - JWT_SECRET_KEY=dev-jwt-secret-key
       - DEBUG=True
-      - CORS_ORIGINS=http://localhost:4200,http://localhost,http://172.16.2.69:4200,http://172.16.2.69
+      - CORS_ORIGINS=https://localhost:4200,https://localhost,https://172.16.2.69:4200,https://172.16.2.69
       - INITIAL_ADMIN_USERNAME=admin
       - INITIAL_ADMIN_EMAIL=admin@kvcloud.local
       - INITIAL_ADMIN_PASSWORD=admin123
       - INITIAL_ADMIN_FULL_NAME=Administrator
-      - API_URL=http://172.16.2.69:8000
+      - API_URL=https://172.16.2.69:4200/api
+      - SSL_CERT_DIR=/etc/ssl/certs/kvcloud
+      - SSL_CERT_FILE=server.crt
+      - SSL_KEY_FILE=server.key
     volumes:
       - ./backend:/app
+      - ssl-certs-dev:/etc/ssl/certs/kvcloud
     networks:
       - kvcloud-network
     restart: unless-stopped
@@ -31,16 +35,22 @@ services:
       dockerfile: Dockerfile.dev
     container_name: kvcloud-frontend-dev
     working_dir: /app
-    command: sh -c "npx ng serve --host 0.0.0.0 --disable-host-check"
     ports:
       - "4200:4200"
     environment:
-      - API_URL=http://172.16.2.69:8000
+      - API_URL=/api
+      - PROXY_BACKEND=true
+      - SSL_CERT_DIR=/etc/ssl/certs/kvcloud
+      - SSL_CERT_FILE=server.crt
+      - SSL_KEY_FILE=server.key
+      - SSL_DOMAIN=172.16.2.69
     volumes:
       - ./frontend/src:/app/src
       - ./frontend/angular.json:/app/angular.json
       - ./frontend/tsconfig.json:/app/tsconfig.json
       - ./frontend/tsconfig.app.json:/app/tsconfig.app.json
+      - ./frontend/proxy.conf.json:/app/proxy.conf.json
+      - ssl-certs-dev:/etc/ssl/certs/kvcloud
     networks:
       - kvcloud-network
     restart: unless-stopped
@@ -48,3 +58,6 @@ services:
 networks:
   kvcloud-network:
     driver: bridge
+
+volumes:
+  ssl-certs-dev:

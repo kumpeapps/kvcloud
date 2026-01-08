@@ -299,9 +299,12 @@ async def get_cluster_metrics(
                         memory_usage += status.get('memory', {}).get('used', 0) / (1024**3)
                         storage_usage += status.get('rootfs', {}).get('used', 0) / (1024**3)
                         
-                        # Count VMs on this node
+                        # Count VMs on this node (skip templates)
                         vms = await proxmox_service.list_vms(node.id)
                         for vm in vms:
+                            if vm.get('template') in (1, True, '1', 'true'):
+                                continue
+
                             vm_status = vm.get('status', 'stopped')
                             if vm_status == 'running':
                                 vms_running += 1

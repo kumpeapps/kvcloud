@@ -8,5 +8,10 @@ COPY package*.json ./
 # Install dependencies ignoring scripts that have permission issues
 RUN npm install --ignore-scripts
 
+# Copy proxy config and dev entrypoint
+COPY proxy.conf.json ./
+COPY dev-entrypoint.sh /dev-entrypoint.sh
+RUN chmod +x /dev-entrypoint.sh
+
 # The source will be mounted as volume
-# Development server will be started by docker-compose command
+CMD ["/dev-entrypoint.sh"]

@@ -126,7 +126,7 @@ export interface CloneVmDialogData {
     }
 
     .source-info {
-      background-color: #f5f5f5;
+      background-color: rgba(0, 0, 0, 0.05);
       padding: 16px;
       border-radius: 4px;
       margin-bottom: 20px;
@@ -137,7 +137,7 @@ export interface CloneVmDialogData {
         font-size: 14px;
         font-weight: 500;
         text-transform: uppercase;
-        color: rgba(0, 0, 0, 0.6);
+        opacity: 0.6;
       }
 
       p {

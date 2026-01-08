@@ -10,6 +10,7 @@ import { MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { MatSelectModule } from '@angular/material/select';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { Subject, takeUntil, forkJoin, interval } from 'rxjs';
 import { VMService, VM } from '../../../core/services/vm.service';
 import { ClusterService, ClusterNode } from '../../../core/services/cluster.service';
@@ -45,6 +46,7 @@ interface CloningTask {
     MatDialogModule,
     MatSelectModule,
     MatFormFieldModule,
+    MatSnackBarModule,
     FormsModule
   ],
   template: `
@@ -119,6 +121,10 @@ interface CloningTask {
                     matTooltip="Clone this template to create a new VM">
               <mat-icon>content_copy</mat-icon>
               Clone
+            </button>
+            <button mat-button color="warn" (click)="deleteTemplate(template)" [disabled]="hasCloningTasks()">
+              <mat-icon>delete</mat-icon>
+              Delete
             </button>
           </mat-card-actions>
 
@@ -201,7 +207,7 @@ interface CloningTask {
         font-size: 64px;
         width: 64px;
         height: 64px;
-        color: rgba(0, 0, 0, 0.26);
+        opacity: 0.3;
         margin-bottom: 16px;
       }
 
@@ -210,7 +216,7 @@ interface CloningTask {
       }
 
       p {
-        color: rgba(0, 0, 0, 0.6);
+        opacity: 0.6;
         margin: 0;
       }
     }
@@ -252,11 +258,11 @@ interface CloningTask {
 
           .label {
             font-weight: 500;
-            color: rgba(0, 0, 0, 0.6);
+            opacity: 0.6;
           }
 
           .value {
-            color: rgba(0, 0, 0, 0.87);
+            opacity: 0.87;
           }
 
           .tags {
@@ -308,7 +314,7 @@ interface CloningTask {
 
               .cloning-title {
                 font-weight: 500;
-                color: #333;
+                opacity: 0.87;
                 margin-bottom: 2px;
               }
 
@@ -356,7 +362,7 @@ interface CloningTask {
         p {
           margin: 0;
           font-size: 14px;
-          color: #333;
+          opacity: 0.87;
 
           &:first-child {
             font-weight: 500;
@@ -394,7 +400,8 @@ export class TemplatesListComponent implements OnInit, OnDestroy {
   constructor(
     private vmService: VMService,
     private clusterService: ClusterService,
-    private dialog: MatDialog
+    private dialog: MatDialog,
+    private snackBar: MatSnackBar
   ) {}
 
   ngOnInit(): void {
@@ -550,5 +557,22 @@ export class TemplatesListComponent implements OnInit, OnDestroy {
   getTags(tags: string): string[] {
     if (!tags) return [];
     return tags.split(';').filter(tag => tag.trim());
+  }
+
+  deleteTemplate(template: VM): void {
+    if (!this.selectedNodeId) return;
+    const confirmed = window.confirm(`Delete template ${template.name || template.vmid}? This cannot be undone.`);
+    if (!confirmed) return;
+
+    this.vmService.deleteTemplate(this.selectedNodeId, template.vmid).subscribe({
+      next: () => {
+        this.snackBar.open('Template deleted', 'Close', { duration: 3000 });
+        this.loadTemplates();
+      },
+      error: (err) => {
+        console.error('Failed to delete template:', err);
+        this.snackBar.open(err?.error?.detail || 'Failed to delete template', 'Close', { duration: 4000 });
+      }
+    });
   }
 }

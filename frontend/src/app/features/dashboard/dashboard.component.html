@@ -8,6 +8,7 @@
       <p class="subtitle" *ngIf="authService.currentUser() as user">
         Welcome back, {{ user?.full_name || user?.username }}!
       </p>
+      <mat-card *ngIf="error()" class="error-card"><mat-card-content>{{ error() }}</mat-card-content></mat-card>
     </div>
 
     <!-- Quick Stats Cards -->
@@ -107,23 +108,10 @@
           <mat-card-title>Recent Activity</mat-card-title>
         </mat-card-header>
         <mat-card-content>
-          <mat-list>
-            <mat-list-item>
-              <mat-icon matListItemIcon>check_circle</mat-icon>
-              <div matListItemTitle>VM 'web-server-01' started</div>
-              <div matListItemLine>2 minutes ago</div>
-            </mat-list-item>
-            <mat-list-item>
-              <mat-icon matListItemIcon>person_add</mat-icon>
-              <div matListItemTitle>New user 'john.doe' created</div>
-              <div matListItemLine>15 minutes ago</div>
-            </mat-list-item>
-            <mat-list-item>
-              <mat-icon matListItemIcon>cloud_upload</mat-icon>
-              <div matListItemTitle>Backup completed successfully</div>
-              <div matListItemLine>1 hour ago</div>
-            </mat-list-item>
-          </mat-list>
+              <div class="empty-state">
+                <mat-icon>event_note</mat-icon>
+                <p>No recent activity yet.</p>
+              </div>
         </mat-card-content>
       </mat-card>
 
@@ -131,22 +119,12 @@
         <mat-card-header>
           <mat-card-title>System Alerts</mat-card-title>
         </mat-card-header>
-        <mat-card-content>
-          <div class="alert-item warning">
-            <mat-icon>warning</mat-icon>
-            <div>
-              <strong>High CPU Usage</strong>
-              <p>Node 'pve-node-02' CPU usage above 80%</p>
+          <mat-card-content>
+            <div class="empty-state">
+              <mat-icon>notifications_none</mat-icon>
+              <p>No active alerts.</p>
             </div>
-          </div>
-          <div class="alert-item info">
-            <mat-icon>info</mat-icon>
-            <div>
-              <strong>Update Available</strong>
-              <p>Proxmox VE 8.1 is now available</p>
-            </div>
-          </div>
-        </mat-card-content>
+          </mat-card-content>
       </mat-card>
     </div>
   </div>

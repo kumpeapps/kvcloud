@@ -121,7 +121,7 @@ import { ResizeDiskDialogComponent } from './resize-disk-dialog.component';
     .no-data {
       text-align: center;
       padding: 40px;
-      color: #666;
+      opacity: 0.6;
     }
 
     .disks-table {

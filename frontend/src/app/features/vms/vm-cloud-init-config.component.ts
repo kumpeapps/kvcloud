@@ -213,7 +213,7 @@ import { environment } from '../../../environments/environment';
   styles: [`
     mat-dialog-content { padding: 24px 0; }
     .step-content { padding: 24px 16px; }
-    .step-subtitle { color: #666; margin-top: 0; margin-bottom: 16px; }
+    .step-subtitle { opacity: 0.6; margin-top: 0; margin-bottom: 16px; }
     .step-actions { margin-top: 24px; display: flex; gap: 8px; justify-content: flex-end; }
     .form-group, .form-section { margin-bottom: 16px; }
     .full-width { width: 100%; }

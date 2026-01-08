@@ -161,7 +161,7 @@ import { RestoreBackupDialogComponent } from '../restore-backup-dialog/restore-b
         font-size: 64px;
         width: 64px;
         height: 64px;
-        color: rgba(0, 0, 0, 0.26);
+        opacity: 0.3;
         margin-bottom: 16px;
       }
 
@@ -170,7 +170,7 @@ import { RestoreBackupDialogComponent } from '../restore-backup-dialog/restore-b
       }
 
       p {
-        color: rgba(0, 0, 0, 0.6);
+        opacity: 0.6;
         margin-bottom: 24px;
       }
     }
@@ -180,7 +180,7 @@ import { RestoreBackupDialogComponent } from '../restore-backup-dialog/restore-b
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 
       .no-notes {
-        color: rgba(0, 0, 0, 0.38);
+        opacity: 0.5;
       }
     }
 

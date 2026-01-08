@@ -333,7 +333,7 @@ import { MatTabsModule } from '@angular/material/tabs';
     h3 { margin-top: 24px; margin-bottom: 16px; }
 
     .guide-content { max-width: 900px; margin: 0 auto; }
-    .guide-content h2 { margin-bottom: 24px; color: #333; }
+    .guide-content h2 { margin-bottom: 24px; opacity: 0.87; }
     .guide-content mat-card { margin-bottom: 24px; }
     .guide-content mat-card-header { background: #f5f5f5; padding: 16px; }
     .guide-content mat-card-title { display: flex; align-items: center; gap: 8px; font-size: 18px; }

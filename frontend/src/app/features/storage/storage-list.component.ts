@@ -217,11 +217,11 @@ export interface Storage {
 
     .label {
       font-weight: 500;
-      color: rgba(0, 0, 0, 0.6);
+      opacity: 0.6;
     }
 
     .value {
-      color: rgba(0, 0, 0, 0.87);
+      opacity: 0.87;
     }
 
     .usage-section {
@@ -236,13 +236,13 @@ export interface Storage {
 
     .usage-text {
       font-size: 13px;
-      color: rgba(0, 0, 0, 0.87);
+      opacity: 0.87;
     }
 
     .available-text {
       margin-top: 4px;
       font-size: 12px;
-      color: rgba(0, 0, 0, 0.6);
+      opacity: 0.6;
       text-align: right;
     }
 
@@ -257,7 +257,7 @@ export interface Storage {
       justify-content: center;
       padding: 48px;
       text-align: center;
-      color: rgba(0, 0, 0, 0.6);
+      opacity: 0.6;
     }
 
     .empty-state mat-icon {

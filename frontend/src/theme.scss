@@ -106,12 +106,12 @@ $kvcloud-dark-theme: mat.define-dark-theme((
   density: 0,
 ));
 
-/* Apply the light theme by default */
-@include mat.all-component-themes($kvcloud-light-theme);
+/* Apply the dark theme by default */
+@include mat.all-component-themes($kvcloud-dark-theme);
 
-/* Dark theme class */
-.dark-theme {
-  @include mat.all-component-colors($kvcloud-dark-theme);
+/* Optional light theme class */
+.light-theme {
+  @include mat.all-component-colors($kvcloud-light-theme);
 }
 
 /* Custom theme overrides */
@@ -121,19 +121,19 @@ $kvcloud-dark-theme: mat.define-dark-theme((
   --warn-color: #f44336;
   --success-color: #4caf50;
   --info-color: #00bcd4;
+  --background-color: #121212;
+  --surface-color: #1f1f1f;
+  --text-primary: rgba(255, 255, 255, 0.87);
+  --text-secondary: rgba(255, 255, 255, 0.6);
+  --border-color: rgba(255, 255, 255, 0.12);
+  --sidebar-width: 260px;
+  --header-height: 64px;
+}
+
+.light-theme {
   --background-color: #fafafa;
   --surface-color: #ffffff;
   --text-primary: rgba(0, 0, 0, 0.87);
   --text-secondary: rgba(0, 0, 0, 0.6);
   --border-color: rgba(0, 0, 0, 0.12);
-  --sidebar-width: 260px;
-  --header-height: 64px;
-}
-
-.dark-theme {
-  --background-color: #303030;
-  --surface-color: #424242;
-  --text-primary: rgba(255, 255, 255, 0.87);
-  --text-secondary: rgba(255, 255, 255, 0.6);
-  --border-color: rgba(255, 255, 255, 0.12);
 }

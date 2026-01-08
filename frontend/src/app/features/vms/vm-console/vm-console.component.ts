@@ -112,7 +112,7 @@ declare const RFB: any;
       justify-content: center;
       gap: 10px;
       padding: 40px;
-      color: #666;
+      opacity: 0.6;
     }
 
     .console-container {

@@ -195,10 +195,15 @@ async def list_vms(
     """List VMs on a node (filtered by user permissions)."""
     service = proxmox_service.ProxmoxService(db)
     all_vms = await service.list_vms(node_id)
+    # Remove template VMs from the generic list view; templates have their own endpoint
+    visible_vms = [
+        vm for vm in all_vms
+        if vm.get('template') not in (1, True, '1', 'true')
+    ]
     
     # If user is superuser, return all VMs
     if current_user.is_superuser:
-        return {"vms": all_vms}
+        return {"vms": visible_vms}
     
     # Get assigned VM IDs for this user
     result = await db.execute(
@@ -207,7 +212,7 @@ async def list_vms(
     assigned_vmids = {row[0] for row in result.all()}
     
     # Filter VMs to only those assigned to user
-    user_vms = [vm for vm in all_vms if vm.get('vmid') in assigned_vmids]
+    user_vms = [vm for vm in visible_vms if vm.get('vmid') in assigned_vmids]
     
     return {"vms": user_vms}
 
@@ -856,6 +861,35 @@ async def list_templates(
     service = proxmox_service.ProxmoxService(db)
     templates = await service.list_templates(node_id)
     return {"templates": templates}
+
+
+@router.delete("/node/{node_id}/templates/{vmid}")
+@require_permission("vm", "delete")
+async def delete_template(
+    node_id: int,
+    vmid: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Delete a VM template (safety check to ensure it's a template)."""
+    service = proxmox_service.ProxmoxService(db)
+
+    # Confirm target is a template before deletion
+    cfg = await service.get_vm_config(node_id, vmid)
+    if not cfg:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+    if cfg.get("template") not in (1, True, "1", "true"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="VM is not a template")
+
+    try:
+        success = await service.delete_vm(node_id, vmid)
+        if not success:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to delete template")
+        return {"message": "Template deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
 @router.get("/node/{node_id}/isos")

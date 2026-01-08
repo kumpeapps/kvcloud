@@ -166,7 +166,7 @@ import { SnapshotScheduleFormDialogComponent } from './snapshot-schedule-form-di
 
     .description {
       font-size: 12px;
-      color: rgba(0, 0, 0, 0.6);
+      opacity: 0.6;
       margin-top: 4px;
     }
 

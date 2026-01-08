@@ -3,5 +3,15 @@ declare const window: any;
 
 export const environment = {
   production: true,
-  apiUrl: (window.ENV && window.ENV.API_URL) || '/api'
+  apiUrl: (function() {
+    const env = (window as any).ENV || {};
+    const proxyEnabled = env.PROXY_BACKEND === true || env.PROXY_BACKEND === 'true';
+    if (env.API_URL) {
+      return env.API_URL;
+    }
+    if (proxyEnabled) {
+      return '/api';
+    }
+    return 'https://' + window.location.hostname + '/api';
+  })()
 };

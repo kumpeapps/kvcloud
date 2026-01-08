@@ -188,7 +188,7 @@ import { BackupPlanFormDialogComponent } from './backup-plan-form-dialog.compone
 
     .description {
       font-size: 12px;
-      color: rgba(0, 0, 0, 0.6);
+      opacity: 0.6;
       margin-top: 4px;
     }
 
@@ -207,7 +207,7 @@ import { BackupPlanFormDialogComponent } from './backup-plan-form-dialog.compone
 
     .success-rate {
       font-size: 11px;
-      color: rgba(0, 0, 0, 0.6);
+      opacity: 0.6;
     }
 
     .run-stats {

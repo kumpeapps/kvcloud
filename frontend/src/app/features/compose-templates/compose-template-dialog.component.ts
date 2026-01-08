@@ -147,7 +147,7 @@ services:
       margin-bottom: 6px;
     }
     .instructions code {
-      background: #f5f5f5;
+      background: rgba(0, 0, 0, 0.05);
       padding: 2px 6px;
       border-radius: 3px;
       font-family: 'Courier New', monospace;

@@ -46,7 +46,7 @@ export class ClusterService {
 
   // Cluster operations
   getClusters(): Observable<Cluster[]> {
-    return this.http.get<Cluster[]>(`${this.apiUrl}/clusters`);
+    return this.http.get<Cluster[]>(`${this.apiUrl}/clusters/`);
   }
 
   getCluster(id: number): Observable<Cluster> {
@@ -54,7 +54,7 @@ export class ClusterService {
   }
 
   createCluster(cluster: ClusterCreate): Observable<Cluster> {
-    return this.http.post<Cluster>(`${this.apiUrl}/clusters`, cluster);
+    return this.http.post<Cluster>(`${this.apiUrl}/clusters/`, cluster);
   }
 
   updateCluster(id: number, cluster: ClusterCreate): Observable<Cluster> {

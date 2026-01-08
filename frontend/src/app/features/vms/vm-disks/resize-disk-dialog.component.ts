@@ -71,7 +71,7 @@ import { MatButtonModule } from '@angular/material/button';
     }
 
     .current-info {
-      background-color: #f5f5f5;
+      background-color: rgba(255, 255, 255, 0.05);
       padding: 12px;
       border-radius: 4px;
       margin-top: 15px;

@@ -225,7 +225,7 @@ import { ClusterService } from '../../core/services/cluster.service';
     .section-header {
       font-weight: 500;
       font-size: 14px;
-      color: rgba(0, 0, 0, 0.87);
+      opacity: 0.87;
       margin-top: 8px;
       margin-bottom: -8px;
     }

@@ -17,6 +17,7 @@ export interface VM {
   uptime?: number;
   type?: string;
   tags?: string;
+  template?: number | boolean | string;
 }
 
 export interface VMStatus {
@@ -247,6 +248,10 @@ export class VMService {
   // Template operations
   getTemplates(nodeId: number): Observable<any> {
     return this.http.get<any>(`${this.apiUrl}/vms/node/${nodeId}/templates`);
+  }
+
+  deleteTemplate(nodeId: number, vmid: number): Observable<any> {
+    return this.http.delete<any>(`${this.apiUrl}/vms/node/${nodeId}/templates/${vmid}`);
   }
 
   getTaskStatus(nodeId: number, taskId: string): Observable<any> {

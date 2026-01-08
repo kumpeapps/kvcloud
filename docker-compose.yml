@@ -10,12 +10,12 @@ services:
       - DATABASE_URL=postgresql+asyncpg://kvcloud:kvcloud@db:5432/kvcloud
       - SECRET_KEY=change-this-in-production
       - JWT_SECRET_KEY=change-this-jwt-secret-in-production
-      - CORS_ORIGINS=http://localhost:4200,http://localhost
+      - CORS_ORIGINS=https://localhost,https://localhost:443
       - INITIAL_ADMIN_USERNAME=admin
       - INITIAL_ADMIN_EMAIL=admin@kvcloud.local
       - INITIAL_ADMIN_PASSWORD=changeme
       - INITIAL_ADMIN_FULL_NAME=Administrator
-      - API_URL=http://localhost:8000
+      - API_URL=https://localhost:8000
     volumes:
       - ./backend:/app
     depends_on:
@@ -31,8 +31,16 @@ services:
     container_name: kvcloud-frontend
     ports:
       - "80:80"
+      - "443:443"
     environment:
-      - API_URL=http://localhost:8000
+      - API_URL=/api
+      - PROXY_BACKEND=true
+      - SSL_CERT_DIR=/etc/ssl/certs/kvcloud
+      - SSL_CERT_FILE=server.crt
+      - SSL_KEY_FILE=server.key
+      - SSL_DOMAIN=localhost
+    volumes:
+      - ssl-certs:/etc/ssl/certs/kvcloud
     depends_on:
       - backend
     networks:
@@ -58,3 +66,4 @@ networks:
 
 volumes:
   postgres-data:
+  ssl-certs:

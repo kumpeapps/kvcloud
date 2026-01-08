@@ -222,15 +222,19 @@ import { MatSnackBar } from '@angular/material/snack-bar';
   styles: [`
     .page { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
     .header { display: flex; justify-content: space-between; align-items: center; }
-    .sub { color: rgba(0,0,0,0.6); font-size: 13px; }
+    .sub { opacity: 0.6; font-size: 13px; }
+    .plan-row { padding: 8px; border-radius: 4px; margin-bottom: 4px; }
+    .plan-row:hover { background: rgba(255,255,255,0.05); }
+    .plan-chip { font-size: 11px; }
     .section { padding: 16px; }
     .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
     .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; align-items: end; }
     .full-width { width: 100%; }
     .mt { margin-top: 12px; }
-    .empty { color: rgba(0,0,0,0.6); padding: 8px 0; }
+    .empty { opacity: 0.6; padding: 8px 0; }
+    .vm-item { padding: 4px 0; font-size: 13px; }
     .list { margin-top: 12px; display: grid; gap: 8px; }
-    .list-title { font-weight: 600; font-size: 13px; color: rgba(0,0,0,0.7); }
+    .list-title { font-weight: 600; font-size: 13px; opacity: 0.7; }
     .list-actions { margin-left: auto; display: flex; gap: 4px; }
   `]
 })

@@ -15,6 +15,12 @@ if (typeof window !== 'undefined' && typeof window.crypto !== 'undefined') {
   }
 }
 
+// Force dark theme as default
+if (typeof document !== 'undefined') {
+  document.body.classList.add('dark-theme');
+  document.body.classList.remove('light-theme');
+}
+
 bootstrapApplication(AppComponent, appConfig)
   .catch((err) => {
     console.error('Bootstrap error:', err);

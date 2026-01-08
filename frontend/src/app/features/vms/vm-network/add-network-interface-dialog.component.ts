@@ -124,11 +124,11 @@ import { VMService } from '../../../core/services/vm.service';
     .checkbox-hint {
       margin-top: 5px;
       font-size: 0.85em;
-      color: #666;
+      opacity: 0.6;
     }
 
     .bridge-info {
-      color: #666;
+      opacity: 0.6;
       font-size: 0.9em;
     }
 

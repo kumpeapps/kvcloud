@@ -84,14 +84,14 @@ export interface MountISODialogData {
     .empty-state {
       text-align: center;
       padding: 32px;
-      color: rgba(0, 0, 0, 0.54);
+      opacity: 0.54;
     }
 
     .empty-state mat-icon {
       font-size: 64px;
       width: 64px;
       height: 64px;
-      color: rgba(0, 0, 0, 0.38);
+      opacity: 0.5;
     }
 
     .empty-state p {
@@ -100,7 +100,7 @@ export interface MountISODialogData {
 
     .empty-state .hint {
       font-size: 12px;
-      color: rgba(0, 0, 0, 0.38);
+      opacity: 0.5;
     }
 
     button mat-spinner {

@@ -17,16 +17,20 @@ RUN npx ng build
 # Production stage
 FROM nginx:alpine
 
+# Install openssl for certificate generation
+RUN apk add --no-cache openssl
+
 # Copy built files to nginx
 COPY --from=build /app/dist/kvcloud-frontend /usr/share/nginx/html
 
-# Copy nginx configuration
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copy nginx SSL configuration (keep old config as fallback)
+COPY nginx-ssl.conf /etc/nginx/conf.d/default.conf
 
-# Copy entrypoint script for runtime configuration
-COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+# Copy SSL entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-EXPOSE 80
+# Expose ports 80 and 443
+EXPOSE 80 443
 
-ENTRYPOINT ["/docker-entrypoint.sh"]
+ENTRYPOINT ["/entrypoint.sh"]

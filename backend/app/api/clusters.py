@@ -247,54 +247,121 @@ async def get_dashboard_stats(
     from sqlalchemy import select, func
     
     service = ProxmoxService(db)
-    
-    # Get counts
+
+    # Active clusters and nodes
     clusters_count = await db.execute(
         select(func.count(ProxmoxCluster.id)).where(ProxmoxCluster.is_active == True)
     )
-    nodes_count = await db.execute(
-        select(func.count(ProxmoxNode.id)).where(ProxmoxNode.is_active == True)
-    )
-    
-    # Get first active node status
     nodes_result = await db.execute(
         select(ProxmoxNode).where(ProxmoxNode.is_active == True)
     )
-    first_node = nodes_result.scalars().first()
-    node_status = None
-    if first_node:
-        node_status = await service.get_node_status(first_node.id)
-    
-    # Initialize response structure
-    response = {
+    nodes = list(nodes_result.scalars().all())
+
+    # Aggregates
+    total_vms = running_vms = stopped_vms = 0
+    cpu_total = cpu_usage = 0.0
+    mem_total = mem_used = 0
+    storage_total = storage_used = 0
+    online_nodes = 0
+    cluster_online_map = {}
+
+    # Iterate active nodes and collect metrics
+    for node in nodes:
+        status = await service.get_node_status(node.id)
+        if status:
+            online_nodes += 1
+            cluster_online_map[node.cluster_id] = True
+            maxcpu = status.get("maxcpu") or 0
+            cpu_fraction = status.get("cpu") or 0
+            node_cpu_total = maxcpu
+            node_cpu_used = cpu_fraction * maxcpu
+
+            node_mem_total = status.get("maxmem") or 0
+            node_mem_used = status.get("mem") or 0
+
+            node_disk_total = status.get("maxdisk") or 0
+            node_disk_used = status.get("disk") or 0
+
+            # VMs on node
+            vm_cpu_total_fallback = 0
+            vm_mem_total_fallback = 0
+            vm_disk_total_fallback = 0
+            vms = await service.list_vms(node.id)
+            for vm in vms or []:
+                # Skip templates when counting VMs
+                if vm.get("template") in (1, True, "1", "true"):
+                    continue
+
+                total_vms += 1
+                if (vm.get("status") or "").lower() == "running":
+                    running_vms += 1
+                else:
+                    stopped_vms += 1
+
+                vm_cpus = vm.get("maxcpu") or vm.get("cpus") or 0
+                vm_cpu_fraction = vm.get("cpu") or 0
+                node_cpu_used += vm_cpu_fraction * vm_cpus
+                vm_cpu_total_fallback += vm_cpus
+
+                vm_mem_used = vm.get("mem") or 0
+                node_mem_used += vm_mem_used
+                vm_mem_total_fallback += vm.get("maxmem") or 0
+
+                vm_disk_used = vm.get("disk") or 0
+                node_disk_used += vm_disk_used
+                vm_disk_total_fallback += vm.get("maxdisk") or 0
+
+            # Use VM-reported capacity if node metrics are missing/zero
+            if not node_cpu_total and vm_cpu_total_fallback:
+                node_cpu_total = vm_cpu_total_fallback
+            if not node_mem_total and vm_mem_total_fallback:
+                node_mem_total = vm_mem_total_fallback
+            if not node_disk_total and vm_disk_total_fallback:
+                node_disk_total = vm_disk_total_fallback
+
+            # Prefer node totals for capacity; fall back to VM-derived numbers if missing/zero
+            cpu_total += node_cpu_total or 0
+            cpu_usage += node_cpu_used or 0
+            mem_total += node_mem_total or 0
+            mem_used += node_mem_used or 0
+            storage_total += node_disk_total or 0
+            storage_used += node_disk_used or 0
+        else:
+            # Node considered offline
+            pass
+
+    clusters_total = clusters_count.scalar() or 0
+    clusters_online = len(cluster_online_map)
+    clusters_offline = max(clusters_total - clusters_online, 0)
+
+    return {
         "clusters": {
-            "total": clusters_count.scalar() or 0,
-            "online": 0,
-            "offline": 0
+            "total": clusters_total,
+            "online": clusters_online,
+            "offline": clusters_offline
         },
         "vms": {
-            "total": 0,
-            "running": 0,
-            "stopped": 0
+            "total": total_vms,
+            "running": running_vms,
+            "stopped": stopped_vms
         },
         "resources": {
             "cpu": {
-                "usage": 0,
-                "total": 0
+                "usage": cpu_usage,
+                "total": cpu_total
             },
             "memory": {
-                "used": 0,
-                "total": 0
+                "used": mem_used,
+                "total": mem_total
             },
             "storage": {
-                "used": 0,
-                "total": 0
+                "used": storage_used,
+                "total": storage_total
             }
         },
-        "nodes": nodes_count.scalar() or 0
+        "nodes": len(nodes),
+        "online_nodes": online_nodes
     }
-    
-    return response
 
 
 # Cluster-specific routes - must come AFTER /nodes and /stats routes

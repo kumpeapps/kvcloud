@@ -386,7 +386,7 @@ interface ComposeTemplate {
     }
 
     .config-section {
-      border: 1px solid rgba(0, 0, 0, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.12);
     }
 
     .section-content {
@@ -400,22 +400,29 @@ interface ComposeTemplate {
       display: flex;
       flex-direction: column;
       gap: 8px;
+
+        small {
+          font-size: 0.75rem;
+          opacity: 0.6;
+          display: block;
+          margin-top: 4px;
+        }
     }
 
     .config-label {
       font-weight: 500;
-      color: rgba(0, 0, 0, 0.87);
+      opacity: 0.87;
       font-size: 14px;
     }
 
     .config-value {
-      background-color: #f5f5f5;
+      background-color: rgba(255, 255, 255, 0.05);
       padding: 8px 12px;
       border-radius: 4px;
       font-family: 'Courier New', monospace;
       font-size: 12px;
       word-break: break-all;
-      color: #333;
+      opacity: 0.87;
     }
 
     .ssh-keys-display {
@@ -425,13 +432,13 @@ interface ComposeTemplate {
     }
 
     .ssh-key {
-      background-color: #f5f5f5;
+      background-color: rgba(255, 255, 255, 0.05);
       padding: 8px 12px;
       border-radius: 4px;
       font-family: 'Courier New', monospace;
       font-size: 11px;
       word-break: break-all;
-      color: #333;
+      opacity: 0.87;
       border-left: 3px solid #1976d2;
       padding-left: 10px;
     }
@@ -439,12 +446,12 @@ interface ComposeTemplate {
     .empty-section {
       padding: 16px;
       text-align: center;
-      color: rgba(0, 0, 0, 0.54);
+      opacity: 0.54;
       font-style: italic;
     }
 
     mat-expansion-panel-header {
-      background-color: #fafafa;
+      background-color: rgba(255, 255, 255, 0.05);
     }
 
     mat-icon {
@@ -484,7 +491,7 @@ interface ComposeTemplate {
       gap: 8px;
       margin-top: 12px;
       padding: 8px 12px;
-      background: #f5f5f5;
+      background: rgba(255, 255, 255, 0.05);
       border-left: 3px solid #1976d2;
       border-radius: 4px;
     }
@@ -505,9 +512,10 @@ interface ComposeTemplate {
       gap: 12px;
       margin-top: 16px;
       padding: 12px;
-      background: #fff3cd;
+      background: rgba(255, 255, 255, 0.05);
       border-left: 4px solid #ff9800;
       border-radius: 4px;
+      color: rgba(255, 255, 255, 0.87);
     }
 
     .pending-provision-alert strong {
@@ -527,13 +535,13 @@ interface ComposeTemplate {
     .pending-provision-alert summary {
       cursor: pointer;
       font-size: 0.875rem;
-      color: #1976d2;
+      color: #90caf9;
     }
 
     .pending-provision-alert pre {
       margin-top: 8px;
       padding: 8px;
-      background: #f5f5f5;
+      background: rgba(255, 255, 255, 0.05);
       border-radius: 4px;
       font-size: 0.75rem;
       overflow-x: auto;
@@ -545,14 +553,15 @@ interface ComposeTemplate {
       align-items: center;
       gap: 12px;
       padding: 10px;
-      border: 1px solid #e0e0e0;
+      border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: 6px;
       margin-bottom: 8px;
+      background: rgba(255, 255, 255, 0.03);
     }
 
     .compose-meta {
       font-size: 12px;
-      color: #555;
+      opacity: 0.7;
     }
 
     .chip {
@@ -562,7 +571,7 @@ interface ComposeTemplate {
       font-size: 12px;
       line-height: 18px;
       background: #e0e0e0;
-      color: #333;
+      opacity: 0.87;
       border: 1px solid transparent;
     }
     .chip-snippet {

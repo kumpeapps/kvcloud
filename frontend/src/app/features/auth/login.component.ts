@@ -53,17 +53,21 @@ import { catchError, finalize, timeout, throwError } from 'rxjs';
     }
     
     .login-card {
-      background: white;
+      background: rgba(255, 255, 255, 0.05);
       padding: 40px;
-      border-radius: 8px;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
       width: 100%;
-      max-width: 400px;
+      max-width: 420px;
+      backdrop-filter: blur(6px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #fff;
     }
     
     h2 {
       margin-bottom: 24px;
       text-align: center;
+      opacity: 0.87;
     }
     
     .form-group {
@@ -74,35 +78,44 @@ import { catchError, finalize, timeout, throwError } from 'rxjs';
       display: block;
       margin-bottom: 8px;
       font-weight: 500;
+      opacity: 0.8;
     }
     
     input {
       width: 100%;
       padding: 10px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
       font-size: 14px;
+      background: rgba(0, 0, 0, 0.25);
+      color: #fff;
+    }
+    
+    input::placeholder {
+      color: rgba(255, 255, 255, 0.5);
     }
     
     input:focus {
       outline: none;
-      border-color: #667eea;
+      border-color: #90caf9;
+      box-shadow: 0 0 0 2px rgba(144, 202, 249, 0.25);
     }
     
     button {
       width: 100%;
       padding: 12px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
+      background: linear-gradient(135deg, #4a90e2 0%, #8e44ad 100%);
+      color: #fff;
       border: none;
-      border-radius: 4px;
+      border-radius: 6px;
       font-size: 16px;
       cursor: pointer;
-      transition: opacity 0.3s;
+      transition: opacity 0.3s, transform 0.1s;
     }
     
     button:hover:not(:disabled) {
-      opacity: 0.9;
+      opacity: 0.92;
+      transform: translateY(-1px);
     }
     
     button:disabled {
@@ -111,11 +124,12 @@ import { catchError, finalize, timeout, throwError } from 'rxjs';
     }
     
     .error-message {
-      color: #e74c3c;
+      color: #ffb3b3;
       margin-bottom: 16px;
       padding: 10px;
-      background: #fdeaea;
-      border-radius: 4px;
+      background: rgba(255, 82, 82, 0.12);
+      border: 1px solid rgba(255, 82, 82, 0.35);
+      border-radius: 6px;
       font-size: 14px;
     }
   `]
