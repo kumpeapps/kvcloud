@@ -1,163 +1,148 @@
 """
 VNC WebSocket Proxy
-Proxies VNC WebSocket connections from the frontend through the backend to Proxmox
 """
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-import asyncio
+from app.core.database import async_session_maker
+from app.models import ProxmoxNode
+from sqlalchemy import select
 import logging
 
-router = APIRouter(prefix="/vnc", tags=["VNC Proxy"])
 logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/vnc", tags=["vnc"])  # Served via /api proxy pathRewrite
 
+@router.get("/test")
+async def test_endpoint():
+    """Test endpoint to verify router is working"""
+    return {"status": "VNC router is working"}
 
 @router.websocket("/proxy/{node_id}/{vmid}")
-async def vnc_proxy_websocket(
-    websocket: WebSocket,
-    node_id: int,
-    vmid: int,
-    port: str,
-    ticket: str
-):
-    """
-    WebSocket proxy endpoint for VNC connections
-    Proxies VNC traffic from frontend through backend to Proxmox
-    """
-    await websocket.accept()
+async def vnc_proxy_websocket(websocket: WebSocket, node_id: int, vmid: int):
+    logger.error(f"[VNC] ===== WEBSOCKET ENDPOINT HIT ===== node={node_id}, vm={vmid}")
     
-    # URL-decode the ticket since it comes URL-encoded from the frontend
-    from urllib.parse import unquote
-    ticket_decoded = unquote(ticket)
+    # Get query parameters
+    query_params = dict(websocket.query_params)
+    vncticket_from_fe = query_params.get('ticket', '')
+    port_from_fe = query_params.get('port', '')
     
-    logger.info(f"VNC Proxy request for node {node_id}, VM {vmid}, port {port}")
-    logger.info(f"Ticket (first 20 chars): {ticket_decoded[:20]}...")
-    
-    proxmox_ws = None
+    logger.error(f"[VNC] Frontend sent ticket: {vncticket_from_fe[:50]}...")
+    logger.error(f"[VNC] Frontend sent port: {port_from_fe}")
     
     try:
-        # Get Proxmox cluster/node info to construct the WebSocket URL
-        # The ticket and port come from the initial VNC connection request
-        from app.core.database import get_db
-        from app.models.proxmox_cluster import ProxmoxNode
-        from sqlalchemy import select
-        
-        async for db in get_db():
-            # Get the Proxmox node details
-            result = await db.execute(
-                select(ProxmoxNode).where(ProxmoxNode.id == node_id)
-            )
+        await websocket.accept()
+        logger.error(f"[VNC] ===== WEBSOCKET ACCEPTED ===== node={node_id}, vm={vmid}")
+    except Exception as e:
+        logger.error(f"[VNC] Failed to accept: {e}")
+        return
+    
+    try:
+        logger.error(f"[VNC] About to get database session...")
+        async with async_session_maker() as db:
+            logger.error(f"[VNC] Database session opened, querying node {node_id}...")
+            result = await db.execute(select(ProxmoxNode).filter(ProxmoxNode.id == node_id))
             node = result.scalar_one_or_none()
             
+            logger.error(f"[VNC] ===== LOADED NODE ===== id={node.id if node else 'None'} name={node.name if node else 'None'}")
             if not node:
+                logger.error(f"[VNC] Node not found: {node_id}")
                 await websocket.close(code=1008, reason="Node not found")
                 return
             
-            # Construct Proxmox WebSocket URL
-            proxmox_host = node.host
-            proxmox_port = node.port
-            node_name = node.name
+            # Authenticate and get fresh ticket (must be same session)
+            logger.error(f"[VNC] Authenticating and getting fresh VNC ticket...")
+            try:
+                import httpx
+                async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
+                    # Step 1: Authenticate
+                    auth_resp = await client.post(
+                        f"https://{node.host}:{node.port}/api2/json/access/ticket",
+                        data={"username": node.username, "password": node.password}
+                    )
+                    if auth_resp.status_code != 200:
+                        logger.error(f"[VNC] Auth failed: {auth_resp.status_code}")
+                        await websocket.close(code=1008, reason="Auth failed")
+                        return
+                    
+                    auth_data = auth_resp.json()['data']
+                    auth_cookie = auth_data['ticket']
+                    csrf = auth_data.get('CSRFPreventionToken', '')
+                    logger.error(f"[VNC] ✓ Authenticated")
+                    
+                    # Step 2: Get VNC ticket using same session
+                    vnc_resp = await client.post(
+                        f"https://{node.host}:{node.port}/api2/json/nodes/{node.name}/qemu/{vmid}/vncproxy",
+                        headers={"Cookie": f"PVEAuthCookie={auth_cookie}", "CSRFPreventionToken": csrf}
+                    )
+                    if vnc_resp.status_code != 200:
+                        logger.error(f"[VNC] VNC ticket failed: {vnc_resp.status_code}")
+                        await websocket.close(code=1008, reason="VNC ticket failed")
+                        return
+                    
+                    vnc_data = vnc_resp.json()['data']
+                    vnc_port = vnc_data['port']
+                    vnc_ticket = vnc_data['ticket']
+                    logger.error(f"[VNC] ✓ Got VNC ticket, port: {vnc_port}")
+            except Exception as e:
+                logger.error(f"[VNC] Auth exception: {e}")
+                await websocket.close(code=1008, reason=f"Auth error: {e}")
+                return
             
-            # Construct Proxmox WebSocket URL
-            # Format: wss://host:8006/api2/json/nodes/{node}/qemu/{vmid}/vncwebsocket?port={vncport}&vncticket={ticket}
-            # The 'port' is the VNC port (from vncproxy result), not the Proxmox port
-            from urllib.parse import quote
-            proxmox_ws_url = (
-                f"wss://{proxmox_host}:{proxmox_port}/api2/json/nodes/{node_name}/"
-                f"qemu/{vmid}/vncwebsocket?port={port}&vncticket={ticket_decoded}"
-            )
-            
-            logger.info(f"Proxying VNC connection to {proxmox_host}:{proxmox_port} for VM {vmid}")
-            logger.info(f"Node: {node_name}, VNC Port: {port}")
-            logger.info(f"Ticket (first 30 chars): {ticket_decoded[:30]}...")
-            
-            # Authenticate with Proxmox to get session cookie
-            # The VNC WebSocket requires both the vncticket AND a valid auth cookie
-            import httpx
-            logger.info("Authenticating with Proxmox...")
+            logger.error(f"[VNC] Connecting with ticket: {vnc_ticket[:50]}... port: {vnc_port}")
             
             try:
-                async with httpx.AsyncClient(verify=False, timeout=10.0) as client:
-                    auth_response = await client.post(
-                        f"https://{proxmox_host}:{proxmox_port}/api2/json/access/ticket",
-                        data={
-                            "username": node.username,
-                            "password": node.password
-                        }
-                    )
+                import websockets, ssl, urllib.parse
+                
+                # Connect to Proxmox VNC WebSocket  
+                # URL-encode the ticket to handle special characters properly
+                encoded_ticket = urllib.parse.quote(vnc_ticket, safe='')
+                ws_url = f"wss://{node.host}:{node.port}/api2/json/nodes/{node.name}/qemu/{vmid}/vncwebsocket?port={vnc_port}&vncticket={encoded_ticket}"
+                logger.error(f"[VNC] WS URL: {ws_url[:120]}...")
+                logger.error(f"[VNC] Using Cookie: PVEAuthCookie={auth_cookie[:50]}...")
+                
+                ssl_ctx = ssl.create_default_context()
+                ssl_ctx.check_hostname = False
+                ssl_ctx.verify_mode = ssl.CERT_NONE
+                
+                # Include Cookie header with auth session
+                logger.error(f"[VNC] Attempting WebSocket connection...")
+                logger.error(f"[VNC] Headers: Cookie=PVEAuthCookie={auth_cookie[:30]}...")
+                
+                async with websockets.connect(
+                    ws_url, 
+                    ssl=ssl_ctx,
+                    additional_headers={
+                        "Cookie": f"PVEAuthCookie={auth_cookie}"
+                    }
+                ) as pws:
+                    logger.error("[VNC] ✓✓✓ SUCCESSFULLY CONNECTED TO PROXMOX VNC ✓✓✓")
                     
-                    if auth_response.status_code != 200:
-                        logger.error(f"Proxmox auth failed: {auth_response.status_code}")
-                        raise Exception(f"Proxmox authentication failed: {auth_response.status_code}")
+                    # Bidirectional proxy
+                    async def fwd_to_px():
+                        try:
+                            while True:
+                                data = await websocket.receive_bytes()
+                                await pws.send(data)
+                        except Exception as e:
+                            logger.debug(f"[VNC] fwd_to_px ended: {e}")
                     
-                    auth_data = auth_response.json()
-                    if 'data' not in auth_data:
-                        logger.error(f"Unexpected auth response: {auth_data}")
-                        raise Exception("Invalid authentication response from Proxmox")
+                    async def fwd_to_fe():
+                        try:
+                            async for msg in pws:
+                                if isinstance(msg, bytes):
+                                    await websocket.send_bytes(msg)
+                                else:
+                                    await websocket.send_bytes(msg.encode())
+                        except Exception as e:
+                            logger.debug(f"[VNC] fwd_to_fe ended: {e}")
                     
-                    auth_cookie = auth_data['data']['ticket']
-                    logger.info("Successfully authenticated with Proxmox")
+                    import asyncio
+                    await asyncio.gather(fwd_to_px(), fwd_to_fe())
                     
-            except Exception as e:
-                logger.error(f"Failed to authenticate with Proxmox: {e}")
+            except Exception as ws_e:
+                logger.error(f"[VNC] WebSocket error: {type(ws_e).__name__}: {ws_e}")
                 raise
-            
-            # Use websockets library for the WebSocket connection
-            import websockets
-            import ssl
-            
-            # Create SSL context that doesn't verify certificates (for self-signed certs)
-            ssl_context = ssl.create_default_context()
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
-            
-            logger.info("Connecting to Proxmox VNC WebSocket...")
-            
-            # Connect to Proxmox VNC WebSocket with both ticket in URL and auth cookie in header
-            async with websockets.connect(
-                proxmox_ws_url,
-                ssl=ssl_context,
-                additional_headers={
-                    "Cookie": f"PVEAuthCookie={auth_cookie}"
-                }
-            ) as proxmox_ws:
-                logger.info("Connected to Proxmox VNC WebSocket")
-                
-                # Create bidirectional proxy
-                async def forward_to_proxmox():
-                    """Forward messages from frontend to Proxmox"""
-                    try:
-                        while True:
-                            data = await websocket.receive_bytes()
-                            await proxmox_ws.send(data)
-                    except WebSocketDisconnect:
-                        logger.info("Frontend WebSocket disconnected")
-                    except Exception as e:
-                        logger.error(f"Error forwarding to Proxmox: {e}")
-                
-                async def forward_to_frontend():
-                    """Forward messages from Proxmox to frontend"""
-                    try:
-                        async for message in proxmox_ws:
-                            if isinstance(message, bytes):
-                                await websocket.send_bytes(message)
-                            else:
-                                await websocket.send_text(message)
-                    except Exception as e:
-                        logger.error(f"Error forwarding to frontend: {e}")
-                
-                # Run both forwarding tasks concurrently
-                await asyncio.gather(
-                    forward_to_proxmox(),
-                    forward_to_frontend(),
-                    return_exceptions=True
-                )
-            
-            break  # Exit the async for loop
-            
+                    
     except Exception as e:
-        logger.error(f"VNC proxy error: {e}", exc_info=True)
+        logger.error(f"[VNC] Error: {e}", exc_info=True)
         try:
-            await websocket.close(code=1011, reason=f"Proxy error: {str(e)}")
-        except:
-            pass
-    finally:
-        logger.info("VNC proxy connection closed")
+            await websocket.close(code=1011, reason=str(e)[:100])
+        except: pass

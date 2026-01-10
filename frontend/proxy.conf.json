@@ -6,6 +6,7 @@
     "logLevel": "info",
     "pathRewrite": {
       "^/api": ""
-    }
+    },
+    "ws": true
   }
 }

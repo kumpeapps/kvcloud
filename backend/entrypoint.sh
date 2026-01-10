@@ -45,7 +45,7 @@ fi
 # Start uvicorn with SSL if certificates are present
 if [ -f "$CERT_PATH" ] && [ -f "$KEY_PATH" ]; then
     echo "Starting uvicorn with HTTPS..."
-    exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --loop asyncio \
+    exec uvicorn app.main:app --host 0.0.0.0 --port 8000 \
         --ssl-keyfile "$KEY_PATH" --ssl-certfile "$CERT_PATH"
 else
     echo "Warning: SSL certificates not found, starting without HTTPS"

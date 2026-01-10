@@ -144,15 +144,19 @@ declare const RFB: any;
 
     .vnc-screen {
       width: 100%;
-      height: 100%;
+      height: calc(100vh - 200px);  /* Account for headers/toolbars */
+      min-height: 600px;
       display: flex;
       justify-content: center;
       align-items: center;
+      background: #1e1e1e;
+      position: relative;
     }
 
     :host ::ng-deep canvas {
       max-width: 100%;
       max-height: 100%;
+      object-fit: contain;
     }
 
     mat-card-content {
@@ -183,6 +187,12 @@ export class VMConsoleComponent implements OnInit, AfterViewInit, OnDestroy {
   ngOnInit() {
     // Auto-connect can be enabled here if desired
     // this.connect();
+    
+    // Listen for fullscreen changes to release mouse
+    document.addEventListener('fullscreenchange', () => this.handleFullscreenChange());
+    document.addEventListener('webkitfullscreenchange', () => this.handleFullscreenChange());
+    document.addEventListener('mozfullscreenchange', () => this.handleFullscreenChange());
+    document.addEventListener('msfullscreenchange', () => this.handleFullscreenChange());
   }
 
   ngAfterViewInit() {
@@ -191,6 +201,12 @@ export class VMConsoleComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy() {
+    // Clean up fullscreen listeners
+    document.removeEventListener('fullscreenchange', () => this.handleFullscreenChange());
+    document.removeEventListener('webkitfullscreenchange', () => this.handleFullscreenChange());
+    document.removeEventListener('mozfullscreenchange', () => this.handleFullscreenChange());
+    document.removeEventListener('msfullscreenchange', () => this.handleFullscreenChange());
+    
     this.disconnect();
   }
 
@@ -262,13 +278,12 @@ export class VMConsoleComponent implements OnInit, AfterViewInit, OnDestroy {
       const ticket = this.vncData.ticket;
       const node = this.vncData.node;
       
-      // Connect through backend WebSocket proxy
-      // Use ws:// or wss:// based on current page protocol
+      // WebSocket via Angular dev proxy (proxy.conf.json) on same port as frontend
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const backendHost = window.location.hostname;
-      const backendPort = '8000'; // Backend API port
+      const backendPort = window.location.port; // 4200 in dev, proxied to backend
       
-      const wsUrl = `${protocol}//${backendHost}:${backendPort}/vnc/proxy/${this.nodeId}/${this.vmid}?port=${port}&ticket=${encodeURIComponent(ticket)}`;
+      const wsUrl = `${protocol}//${backendHost}:${backendPort}/api/vnc/proxy/${this.nodeId}/${this.vmid}?port=${port}&ticket=${encodeURIComponent(ticket)}`;
 
       console.log('Connecting to VNC via backend proxy:', `${protocol}//${backendHost}:${backendPort}/vnc/proxy/...`);
       console.log('Full WebSocket URL:', wsUrl);
@@ -290,6 +305,10 @@ export class VMConsoleComponent implements OnInit, AfterViewInit, OnDestroy {
         },
         wsProtocols: ['binary']
       });
+      
+      // Set scaling mode for better display
+      this.rfb.scaleViewport = true;  // Scale to fit viewport
+      this.rfb.resizeSession = false; // Don't resize remote session
 
       // Set up event handlers
       this.rfb.addEventListener('connect', () => {
@@ -408,5 +427,38 @@ export class VMConsoleComponent implements OnInit, AfterViewInit, OnDestroy {
       (document as any).msExitFullscreen();
     }
     this.isFullscreen.set(false);
+    
+    // Release mouse capture when exiting fullscreen
+    this.releaseMouse();
+  }
+  
+  private handleFullscreenChange() {
+    // Update fullscreen state based on actual document state
+    const isCurrentlyFullscreen = !!(
+      document.fullscreenElement ||
+      (document as any).webkitFullscreenElement ||
+      (document as any).mozFullScreenElement ||
+      (document as any).msFullscreenElement
+    );
+    
+    this.isFullscreen.set(isCurrentlyFullscreen);
+    
+    // Release mouse when exiting fullscreen
+    if (!isCurrentlyFullscreen) {
+      this.releaseMouse();
+    }
+  }
+  
+  private releaseMouse() {
+    // Release pointer lock if active
+    if (document.pointerLockElement || (document as any).mozPointerLockElement || (document as any).webkitPointerLockElement) {
+      if (document.exitPointerLock) {
+        document.exitPointerLock();
+      } else if ((document as any).mozExitPointerLock) {
+        (document as any).mozExitPointerLock();
+      } else if ((document as any).webkitExitPointerLock) {
+        (document as any).webkitExitPointerLock();
+      }
+    }
   }
 }
