@@ -60,7 +60,7 @@ export interface IPAllocateRequest {
   providedIn: 'root'
 })
 export class IPPoolService {
-  private apiUrl = `${environment.apiUrl}/ippools`;
+  private apiUrl = `${environment.apiUrl}/ippools/`;
 
   constructor(private http: HttpClient) {}
 

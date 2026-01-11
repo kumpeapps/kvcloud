@@ -106,7 +106,7 @@ export class RolesComponent implements OnInit {
   deleteRole(role: Role): void {
     this.confirmationService.confirmDelete(role.name).subscribe((confirmed: any) => {
       if (confirmed) {
-        this.rolesService.deleteRole(role.id).subscribe({
+        this.rolesService.deleteRole(role.name).subscribe({
           next: () => {
             this.snackBar.open('Role deleted successfully', 'Close', { duration: 3000 });
             this.loadRoles();

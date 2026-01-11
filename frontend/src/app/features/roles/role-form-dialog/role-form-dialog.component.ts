@@ -95,7 +95,8 @@ export class RoleFormDialogComponent {
         permissions
       };
 
-      this.rolesService.updateRole(this.data.id, updateData).subscribe({
+      // Pass role name instead of ID to the backend
+      this.rolesService.updateRole(this.data.name, updateData).subscribe({
         next: () => {
           this.loading.set(false);
           this.dialogRef.close(true);

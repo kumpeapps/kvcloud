@@ -8,7 +8,7 @@ import { Role, CreateRoleRequest, UpdateRoleRequest } from '../models/role.model
   providedIn: 'root'
 })
 export class RolesService {
-  private apiUrl = `${environment.apiUrl}/roles`;
+  private apiUrl = `${environment.apiUrl}/roles/`;
 
   constructor(private http: HttpClient) {}
 
@@ -17,19 +17,19 @@ export class RolesService {
   }
 
   getRole(id: number): Observable<Role> {
-    return this.http.get<Role>(`${this.apiUrl}/${id}`);
+    return this.http.get<Role>(`${this.apiUrl}${id}`);
   }
 
   createRole(role: CreateRoleRequest): Observable<Role> {
     return this.http.post<Role>(this.apiUrl, role);
   }
 
-  updateRole(id: number, role: UpdateRoleRequest): Observable<Role> {
-    return this.http.put<Role>(`${this.apiUrl}/${id}`, role);
+  updateRole(roleNameOrId: string | number, role: UpdateRoleRequest): Observable<Role> {
+    return this.http.put<Role>(`${this.apiUrl}${roleNameOrId}`, role);
   }
 
-  deleteRole(id: number): Observable<void> {
-    return this.http.delete<void>(`${this.apiUrl}/${id}`);
+  deleteRole(nameOrId: string | number): Observable<void> {
+    return this.http.delete<void>(`${this.apiUrl}${nameOrId}`);
   }
 
   assignRoleToUser(userId: number, roleId: number): Observable<void> {

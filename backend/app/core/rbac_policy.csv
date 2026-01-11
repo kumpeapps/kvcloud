@@ -53,6 +53,7 @@ p, user, ssh-key, delete
 p, user, task, read
 p, user, agent, read
 p, user, agent, execute
+p, user, role, read
 p, viewer, vm, read
 p, viewer, vm, console
 p, viewer, snapshot, read
@@ -69,3 +70,4 @@ p, viewer, metrics, read
 p, viewer, cloud-init, read
 p, viewer, ssh-key, read
 p, viewer, task, read
+p, viewer, role, read
