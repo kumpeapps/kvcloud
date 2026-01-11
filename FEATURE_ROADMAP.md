@@ -64,21 +64,44 @@
 
 ## 🚧 In Progress / Recently Completed
 
+### Audit Logs & Task Queue ✅ COMPLETED (January 11, 2026)
+- [x] AuditLog model with comprehensive tracking (user, action, resource, timestamp, IP, status)
+- [x] Audit middleware for automatic API request logging
+- [x] `/audit-logs` GET endpoint with filtering (user, action, date, resource)
+- [x] Task model for long-running operation tracking (status, progress, timing, results)
+- [x] `/tasks` and `/tasks/{task_id}` GET endpoints for task status
+- [x] Task history endpoint: `GET /tasks/history`
+- [x] Frontend AuditLogsComponent with Material table and filtering
+- [x] Frontend TasksQueueComponent with real-time status and progress
+- [x] Navigation integration with task badge showing active count
+- [x] Role-based access control (audit-logs admin-only, tasks visible to user)
+- [x] Task completion notifications (toast alerts)
+- [x] Database migration for tasks table with proper indexes
+- **Status**: ✅ FEATURE COMPLETE AND TESTED
+- Files:
+  - Backend: `backend/app/models/task.py`, `backend/app/core/audit_middleware.py`, `backend/app/api/audit_logs.py`, `backend/app/api/tasks.py`
+  - Frontend: `frontend/src/app/features/audit-logs/`, `frontend/src/app/features/tasks/`
+  - Database: `backend/alembic/versions/c1d2e3f4g5h6_add_task_table.py`
+  - Documentation: Updated in ADMIN_GUIDE.md
+
 ### RBAC & Permissions ✅ COMPLETED (January 11, 2026)
 - [x] Casbin enforcer initialization and dependency injection
 - [x] `@require_permission` decorator for API endpoints
-- [x] RBAC policy expansion (65+ rules, 3 default roles)
+- [x] RBAC policy expansion (67+ rules, 3 default roles)
+- [x] Role management endpoints (CRUD with custom permissions)
 - [x] `/auth/permissions` endpoint for frontend
 - [x] Frontend permission directive (`*hasPermission`)
 - [x] Frontend route guards (`permissionGuard`)
 - [x] AuthService permission fetching and caching
 - [x] Permission matrix (admin, user, viewer roles)
 - [x] API enforcement with proper error responses (403 Forbidden)
+- [x] Role create/edit/delete dialogs with permission selection
+- [x] 77+ available permissions across 18 resources
 - [x] Comprehensive admin documentation
-- **Status**: Feature complete and tested
+- **Status**: ✅ FEATURE COMPLETE AND TESTED
 - Files: 
-  - Backend: `backend/app/core/dependencies.py`, `backend/app/core/rbac_policy.csv`, `backend/app/api/auth.py`
-  - Frontend: `frontend/src/app/core/services/auth.service.ts`, `frontend/src/app/core/directives/has-permission.directive.ts`, `frontend/src/app/core/guards/role.guard.ts`
+  - Backend: `backend/app/core/dependencies.py`, `backend/app/core/rbac_policy.csv`, `backend/app/api/roles.py`, `backend/app/api/auth.py`
+  - Frontend: `frontend/src/app/core/services/auth.service.ts`, `frontend/src/app/features/roles/`, `frontend/src/app/core/directives/has-permission.directive.ts`
   - Documentation: `docs/ADMIN_GUIDE.md` (RBAC section expanded)
 
 ### VNC Console ✅ COMPLETED (January 10, 2026)

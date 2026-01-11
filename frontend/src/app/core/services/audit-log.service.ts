@@ -5,14 +5,20 @@ import { environment } from '../../../environments/environment';
 
 export interface AuditLog {
   id: number;
-  user_id: number;
+  user_id?: number;
   username: string;
   action: string;
   resource_type: string;
-  resource_id?: number;
-  details?: any;
+  resource_id?: string;
+  resource_name?: string;
   ip_address?: string;
+  user_agent?: string;
+  description?: string;
+  request_data?: any;
+  response_status?: number;
   status: 'success' | 'failed';
+  error_message?: string;
+  duration_ms?: number;
   created_at: string;
 }
 
@@ -39,7 +45,7 @@ export interface AuditLogFilters {
   providedIn: 'root'
 })
 export class AuditLogService {
-  private apiUrl = `${environment.apiUrl}/audit-logs`;
+  private apiUrl = `${environment.apiUrl}/audit-logs/`;
 
   constructor(private http: HttpClient) {}
 
@@ -68,6 +74,6 @@ export class AuditLogService {
       });
     }
     
-    return this.http.get<AuditLogStats>(`${this.apiUrl}/stats`, { params });
+    return this.http.get<AuditLogStats>(`${this.apiUrl}/stats/summary`, { params });
   }
 }

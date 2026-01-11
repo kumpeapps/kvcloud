@@ -22,6 +22,7 @@ services:
       - SSL_KEY_FILE=server.key
       - SSL_DOMAIN=172.16.2.69
       - PYTHONUNBUFFERED=1
+      - TZ=America/Chicago
     volumes:
       - ./backend:/app
       - ssl-certs-dev:/etc/ssl/certs/kvcloud

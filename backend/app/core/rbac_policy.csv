@@ -54,6 +54,7 @@ p, user, task, read
 p, user, agent, read
 p, user, agent, execute
 p, user, role, read
+p, user, audit, read
 p, viewer, vm, read
 p, viewer, vm, console
 p, viewer, snapshot, read

@@ -1,6 +1,7 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule } from '@angular/forms';
+import { MatPaginator, PageEvent } from '@angular/material/paginator';
 import { MaterialModule } from '../../shared/material.module';
 import { AuditLogService, AuditLog, AuditLogStats, AuditLogFilters } from '../../core/services/audit-log.service';
 import { UserService } from '../../core/services/user.service';
@@ -13,10 +14,21 @@ import { UserService } from '../../core/services/user.service';
   styleUrls: ['./audit-logs.component.scss']
 })
 export class AuditLogsComponent implements OnInit {
+  @ViewChild(MatPaginator) paginator!: MatPaginator;
+  
   logs: AuditLog[] = [];
   stats: AuditLogStats | null = null;
   loading = false;
   displayedColumns = ['timestamp', 'username', 'action', 'resource', 'status', 'ip_address', 'details'];
+  
+  // Pagination
+  totalLogs = 0;
+  pageSize = 10;
+  pageIndex = 0;
+  pageSizeOptions = [5, 10, 25, 50, 100];
+  
+  // Timezone
+  userTimezone: string;
   
   filterForm: FormGroup;
   users: any[] = [];
@@ -36,6 +48,9 @@ export class AuditLogsComponent implements OnInit {
     private userService: UserService,
     private fb: FormBuilder
   ) {
+    // Get user's timezone from browser
+    this.userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    
     this.filterForm = this.fb.group({
       user_id: [null],
       action: [''],
@@ -66,10 +81,14 @@ export class AuditLogsComponent implements OnInit {
   loadLogs(): void {
     this.loading = true;
     const filters = this.getFilters();
+    filters.limit = this.pageSize;
+    filters.offset = this.pageIndex * this.pageSize;
     
     this.auditService.getLogs(filters).subscribe({
       next: (logs) => {
         this.logs = logs;
+        // Since we're controlling pagination on frontend, set total to show we have more if at capacity
+        this.totalLogs = logs.length >= this.pageSize ? (this.pageIndex + 1) * this.pageSize + 1 : (this.pageIndex * this.pageSize + logs.length);
         this.loading = false;
       },
       error: (error) => {
@@ -121,13 +140,27 @@ export class AuditLogsComponent implements OnInit {
     return filters;
   }
 
+  onPageChange(event: PageEvent): void {
+    this.pageIndex = event.pageIndex;
+    this.pageSize = event.pageSize;
+    this.loadLogs();
+  }
+
   applyFilters(): void {
+    this.pageIndex = 0;
+    if (this.paginator) {
+      this.paginator.firstPage();
+    }
     this.loadLogs();
     this.loadStats();
   }
 
   clearFilters(): void {
     this.filterForm.reset();
+    this.pageIndex = 0;
+    if (this.paginator) {
+      this.paginator.firstPage();
+    }
     this.loadLogs();
     this.loadStats();
   }
@@ -163,5 +196,44 @@ export class AuditLogsComponent implements OnInit {
         const countB = parseInt(b.split(': ')[1]);
         return countB - countA;
       });
+  }
+
+  formatDateWithTimezone(dateString: string): string {
+    try {
+      // Handle both ISO format (UTC-aware) and naive datetime format (YYYY-MM-DD HH:MM:SS)
+      let date: Date;
+      
+      // Check if it's ISO format with T (UTC-aware)
+      if (dateString.includes('T')) {
+        // ISO format - JavaScript will interpret as UTC
+        date = new Date(dateString);
+      } else if (dateString.includes(' ')) {
+        // Naive datetime format (YYYY-MM-DD HH:MM:SS) - treat as local time in server's timezone
+        // For now, we'll assume these are in UTC for consistency
+        date = new Date(dateString.replace(' ', 'T') + 'Z');
+      } else {
+        // Fallback
+        date = new Date(dateString);
+      }
+      
+      // If date is invalid, return original string
+      if (isNaN(date.getTime())) {
+        return dateString;
+      }
+      
+      // Format using user's local timezone
+      return date.toLocaleString('en-US', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+        timeZone: this.userTimezone
+      });
+    } catch (e) {
+      return dateString;
+    }
   }
 }

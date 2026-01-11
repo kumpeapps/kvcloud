@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, and_
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
 from ..core.database import get_db
 from ..core.dependencies import get_current_user, require_permission
@@ -10,6 +10,16 @@ from ..models.user import User
 from ..models.audit_log import AuditLog
 
 router = APIRouter(prefix="/audit-logs", tags=["audit-logs"])
+
+
+def format_datetime_utc(dt: Optional[datetime]) -> str:
+    """Format datetime to ISO format with UTC timezone."""
+    if not dt:
+        return ""
+    # If datetime is naive (no timezone), assume it's UTC
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
 
 
 class AuditLogResponse(BaseModel):
@@ -25,6 +35,7 @@ class AuditLogResponse(BaseModel):
     ip_address: Optional[str]
     user_agent: Optional[str]
     description: Optional[str]
+    request_data: Optional[dict] = None
     response_status: Optional[int]
     status: str
     error_message: Optional[str]
@@ -103,11 +114,12 @@ async def list_audit_logs(
             ip_address=log.ip_address,
             user_agent=log.user_agent,
             description=log.description,
+            request_data=log.request_data,
             response_status=log.response_status,
             status=log.status,
             error_message=log.error_message,
             duration_ms=log.duration_ms,
-            created_at=log.created_at.isoformat() if log.created_at else ""
+            created_at=format_datetime_utc(log.created_at)
         )
         for log in logs
     ]
@@ -145,11 +157,12 @@ async def get_audit_log(
         ip_address=log.ip_address,
         user_agent=log.user_agent,
         description=log.description,
+        request_data=log.request_data,
         response_status=log.response_status,
         status=log.status,
         error_message=log.error_message,
         duration_ms=log.duration_ms,
-        created_at=log.created_at.isoformat() if log.created_at else ""
+        created_at=format_datetime_utc(log.created_at)
     )
 
 

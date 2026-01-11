@@ -1,15 +1,20 @@
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
+from starlette.datastructures import Headers
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import time
 import json
+import logging
 from typing import Callable
+from datetime import datetime, timezone
 from app.core.database import async_session_maker
 from app.models.audit_log import AuditLog
 from app.models.user import User
 from app.core.security import decode_access_token
+
+logger = logging.getLogger(__name__)
 
 
 class AuditMiddleware(BaseHTTPMiddleware):
@@ -21,18 +26,16 @@ class AuditMiddleware(BaseHTTPMiddleware):
         "/redoc",
         "/openapi.json",
         "/health",
-        "/",
-        "/api/auth/token",  # Don't log login attempts
+        # "/api/auth/token",  # Don't log login attempts
     ]
-    
-    # Methods to log (typically exclude GET for read operations to reduce logs)
-    LOGGED_METHODS = ["POST", "PUT", "PATCH", "DELETE"]
     
     def __init__(self, app: ASGIApp, log_read_operations: bool = False):
         super().__init__(app)
         self.log_read_operations = log_read_operations
+        # Methods to log (typically exclude GET for read operations to reduce logs)
+        self.logged_methods = ["POST", "PUT", "PATCH", "DELETE"]
         if log_read_operations:
-            self.LOGGED_METHODS.append("GET")
+            self.logged_methods.append("GET")
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         """Process request and log to audit table."""
@@ -43,8 +46,11 @@ class AuditMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         
         # Skip if method not logged
-        if request.method not in self.LOGGED_METHODS:
+        if request.method not in self.logged_methods:
+            logger.debug(f"[AUDIT] Skipped (method {request.method} not in {self.logged_methods}): {request.url.path}")
             return await call_next(request)
+        
+        logger.warning(f"[AUDIT] Processing {request.method} {request.url.path}")
         
         # Extract user from token
         user_id = None
@@ -59,21 +65,43 @@ class AuditMiddleware(BaseHTTPMiddleware):
                 username = payload.get("sub", "unknown")
                 # We'll get the user_id from DB below
         
-        # Get request body if present
+        # Get request body and query params
         request_data = None
+        
+        # For POST/PUT/PATCH, try to read and cache body
         if request.method in ["POST", "PUT", "PATCH"]:
             try:
+                # Read body (this caches it in the request object)
                 body = await request.body()
                 if body:
-                    request_data = json.loads(body.decode())
-                    # Remove sensitive fields
-                    if isinstance(request_data, dict):
-                        request_data.pop("password", None)
-                        request_data.pop("hashed_password", None)
-            except:
-                pass
+                    try:
+                        data = json.loads(body.decode())
+                        # Remove sensitive fields
+                        if isinstance(data, dict):
+                            data_copy = data.copy()
+                            data_copy.pop("password", None)
+                            data_copy.pop("hashed_password", None)
+                        else:
+                            data_copy = data
+                        request_data = data_copy
+                    except:
+                        # If not JSON, just note that body exists
+                        request_data = {"_note": "Non-JSON body", "size": len(body)}
+            except Exception as e:
+                logger.debug(f"[AUDIT] Could not capture request body: {e}")
+        
+        # For GET/DELETE, capture significant query params (skip pagination)
+        elif request.method in ["GET", "DELETE"]:
+            query_params = dict(request.query_params)
+            # Remove pagination params to reduce noise
+            query_params.pop("skip", None)
+            query_params.pop("limit", None)
+            query_params.pop("offset", None)
+            if query_params:
+                request_data = {"query": query_params}
         
         # Process request
+        # Note: request.body() is cached by FastAPI, so reading it above doesn't prevent reading here
         response = await call_next(request)
         
         # Calculate duration
@@ -108,17 +136,18 @@ class AuditMiddleware(BaseHTTPMiddleware):
                     ip_address=request.client.host if request.client else None,
                     user_agent=request.headers.get("user-agent"),
                     description=self._generate_description(request.method, resource_type, resource_id),
-                    request_data=request_data,
+                    request_data=request_data if request_data else None,
                     response_status=response.status_code,
                     status=status,
-                    duration_ms=duration_ms
+                    duration_ms=duration_ms,
+                    created_at=datetime.now(timezone.utc)
                 )
                 
                 db.add(audit_log)
                 await db.commit()
         except Exception as e:
             # Don't fail the request if audit logging fails
-            print(f"Audit logging failed: {e}")
+            logger.warning(f"[AUDIT] Failed to log: {type(e).__name__}: {str(e)}")
         
         return response
     
@@ -126,38 +155,78 @@ class AuditMiddleware(BaseHTTPMiddleware):
         """Extract resource type and ID from URL path."""
         parts = path.strip("/").split("/")
         
-        # Common patterns
-        if "vms" in parts or "vm" in parts:
-            resource_type = "vm"
-            # Look for vmid
-            for i, part in enumerate(parts):
-                if part == "vm" and i + 1 < len(parts):
-                    return resource_type, parts[i + 1]
-        elif "clusters" in parts or "cluster" in parts:
-            resource_type = "cluster"
-            if len(parts) > 1:
-                return resource_type, parts[-1]
-        elif "users" in parts or "user" in parts:
-            resource_type = "user"
-            if len(parts) > 1 and parts[-1].isdigit():
-                return resource_type, parts[-1]
-        elif "backups" in parts or "backup" in parts:
-            resource_type = "backup"
-        elif "snapshots" in parts or "snapshot" in parts:
-            resource_type = "snapshot"
-        elif "isos" in parts or "iso" in parts:
-            resource_type = "iso"
-        elif "ippools" in parts:
-            resource_type = "ippool"
-        elif "nodes" in parts or "node" in parts:
-            resource_type = "node"
-            for i, part in enumerate(parts):
-                if part == "node" and i + 1 < len(parts):
-                    return resource_type, parts[i + 1]
-        else:
-            resource_type = "unknown"
+        # Map of endpoints to resource types
+        resource_map = {
+            "vms": "vm",
+            "vm": "vm",
+            "clusters": "cluster",
+            "cluster": "cluster",
+            "users": "user",
+            "user": "user",
+            "roles": "role",
+            "role": "role",
+            "backups": "backup",
+            "backup": "backup",
+            "snapshots": "snapshot",
+            "snapshot": "snapshot",
+            "isos": "iso",
+            "iso": "iso",
+            "ippools": "ippool",
+            "ippool": "ippool",
+            "nodes": "node",
+            "node": "node",
+            "templates": "template",
+            "template": "template",
+            "disks": "disk",
+            "disk": "disk",
+            "networks": "network",
+            "network": "network",
+            "tasks": "task",
+            "task": "task",
+            "audit-logs": "audit-log",
+            "firewall": "firewall",
+            "metrics": "metric",
+            "console": "console",
+            "snapshots": "snapshot",
+            "cloud-init": "cloud-init",
+            "ssh-keys": "ssh-key",
+            "quotas": "quota",
+            "auth": "auth",
+        }
         
-        return resource_type, None
+        # Try to find resource type from path parts
+        resource_type = None
+        resource_id = None
+        
+        for i, part in enumerate(parts):
+            if part in resource_map:
+                resource_type = resource_map[part]
+                # Try to get resource ID from next part if it's not an action
+                if i + 1 < len(parts):
+                    next_part = parts[i + 1]
+                    # Skip action keywords, look for numeric IDs
+                    if not next_part in ['create', 'read', 'update', 'delete', 'start', 'stop', 'restart', 
+                                        'snapshot', 'backup', 'restore', 'clone', 'stats', 'summary',
+                                        'permissions', 'me', 'token', 'login', 'logout']:
+                        # Check if it looks like an ID (numeric, UUID, or valid identifier)
+                        if next_part and (next_part.isdigit() or '-' in next_part or '_' in next_part):
+                            resource_id = next_part
+                break
+        
+        # If no resource type found, try to extract from common patterns
+        if not resource_type:
+            if len(parts) > 0:
+                first_part = parts[0]
+                if first_part in resource_map:
+                    resource_type = resource_map[first_part]
+                    if len(parts) > 1 and parts[1].isdigit():
+                        resource_id = parts[1]
+                else:
+                    resource_type = "unknown"
+            else:
+                resource_type = "unknown"
+        
+        return resource_type or "unknown", resource_id
     
     def _determine_action(self, method: str, path: str) -> str:
         """Determine action from HTTP method and path."""

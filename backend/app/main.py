@@ -105,7 +105,7 @@ app.add_middleware(
 )
 
 # Add audit logging middleware
-app.add_middleware(AuditMiddleware, log_read_operations=False)
+app.add_middleware(AuditMiddleware, log_read_operations=True)
 
 # Register API routers
 app.include_router(auth.router)

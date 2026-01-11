@@ -10,7 +10,7 @@ class AuditLog(Base):
     id = Column(Integer, primary_key=True, index=True)
     
     # Who performed the action
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)  # nullable for system/anonymous actions
     username = Column(String, nullable=False, index=True)
     
     # What action was performed
