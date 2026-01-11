@@ -23,6 +23,12 @@ interface User {
   is_superuser: boolean;
 }
 
+interface UserPermissions {
+  role: string;
+  is_superuser: boolean;
+  permissions: Array<{resource: string, action: string}>;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -30,6 +36,7 @@ export class AuthService {
   private apiUrl = environment.apiUrl;
   currentUser = signal<User | null>(null);
   isAuthenticated = signal<boolean>(false);
+  private userPermissions = signal<UserPermissions | null>(null);
 
   constructor(private http: HttpClient) {
     // Check if we have a token on init
@@ -37,6 +44,7 @@ export class AuthService {
     if (token) {
       this.isAuthenticated.set(true);
       this.loadCurrentUser();
+      this.loadUserPermissions();
     }
   }
 
@@ -50,6 +58,7 @@ export class AuthService {
         localStorage.setItem('access_token', response.access_token);
         this.isAuthenticated.set(true);
         this.loadCurrentUser();
+        this.loadUserPermissions();
       })
     );
   }
@@ -57,6 +66,7 @@ export class AuthService {
   logout(): void {
     localStorage.removeItem('access_token');
     this.currentUser.set(null);
+    this.userPermissions.set(null);
     this.isAuthenticated.set(false);
   }
 
@@ -76,6 +86,17 @@ export class AuthService {
     });
   }
 
+  loadUserPermissions(): void {
+    this.http.get<UserPermissions>(`${this.apiUrl}/auth/permissions`).subscribe({
+      next: (permissions) => {
+        this.userPermissions.set(permissions);
+      },
+      error: () => {
+        console.error('Failed to load user permissions');
+      }
+    });
+  }
+
   changePassword(currentPassword: string, newPassword: string): Observable<any> {
     return this.http.post(`${this.apiUrl}/auth/change-password`, {
       current_password: currentPassword,
@@ -91,45 +112,28 @@ export class AuthService {
    */
   hasPermission(resource: string, action: string): boolean {
     const user = this.currentUser();
+    const permissions = this.userPermissions();
     
-    if (!user) return false;
+    if (!user || !permissions) return false;
     
-    // Superusers and admins have all permissions
-    if (user.is_superuser || user.role === 'admin') {
+    // Superusers have all permissions
+    if (user.is_superuser || permissions.is_superuser) {
       return true;
     }
     
-    // Permission mappings based on role
-    const permissions: Record<string, string[]> = {
-      'user': [
-        'vm:read', 'vm:create', 'vm:start', 'vm:stop', 'vm:restart', 
-        'vm:delete', 'vm:update', 'vm:console',
-        'snapshot:read', 'snapshot:create', 'snapshot:delete', 'snapshot:rollback',
-        'iso:read', 'iso:upload',
-        'cluster:read', 'node:read',
-        'ippool:read', 'ippool:allocate', 'ippool:deallocate'
-      ],
-      'viewer': [
-        'vm:read', 'snapshot:read', 'cluster:read', 
-        'node:read', 'iso:read', 'ippool:read'
-      ],
-      'reseller': [
-        'vm:read', 'vm:create', 'vm:start', 'vm:stop', 'vm:restart',
-        'vm:delete', 'vm:update',
-        'user:create', 'user:read', 'user:update', 'user:delete',
-        'snapshot:read', 'snapshot:create', 'snapshot:delete',
-        'iso:read', 'iso:upload',
-        'ippool:read', 'ippool:allocate', 'ippool:deallocate'
-      ]
-    };
+    // Check for wildcard permission
+    const hasWildcard = permissions.permissions.some(
+      p => (p.resource === '*' && p.action === '*') ||
+           (p.resource === resource && p.action === '*') ||
+           (p.resource === '*' && p.action === action)
+    );
     
-    const userPermissions = permissions[user.role] || [];
-    const permissionKey = `${resource}:${action}`;
-    const wildcardKey = `${resource}:*`;
+    if (hasWildcard) return true;
     
-    return userPermissions.includes(permissionKey) || 
-           userPermissions.includes(wildcardKey) ||
-           userPermissions.includes('*:*');
+    // Check for exact permission
+    return permissions.permissions.some(
+      p => p.resource === resource && p.action === action
+    );
   }
 
   /**

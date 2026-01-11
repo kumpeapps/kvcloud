@@ -1,6 +1,6 @@
 """Authentication endpoints."""
 from datetime import timedelta
-from typing import Optional
+from typing import Optional, List, Dict
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +17,7 @@ from app.core.security import (
 )
 from app.core.dependencies import get_current_user, get_current_active_user
 from app.core.config import settings
+from app.core.rbac import get_rbac
 from app.models.user import User
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -145,3 +146,44 @@ async def change_password(
     await db.commit()
     
     return {"message": "Password changed successfully"}
+
+
+class PermissionsResponse(BaseModel):
+    """Response model for user permissions."""
+    role: str
+    is_superuser: bool
+    permissions: List[Dict[str, str]]
+
+
+@router.get("/permissions", response_model=PermissionsResponse)
+async def get_user_permissions(
+    current_user: User = Depends(get_current_user)
+):
+    """Get current user's role and permissions list."""
+    role = current_user.role if hasattr(current_user, 'role') and current_user.role else 'user'
+    
+    permissions = []
+    
+    # Superuser has all permissions
+    if current_user.is_superuser:
+        return PermissionsResponse(
+            role=role,
+            is_superuser=True,
+            permissions=[{"resource": "*", "action": "*"}]
+        )
+    
+    # Get permissions from RBAC
+    rbac_manager = get_rbac()
+    if rbac_manager and rbac_manager.enforcer:
+        # Get all policies for this role
+        policies = rbac_manager.enforcer.get_filtered_policy(0, role)
+        permissions = [
+            {"resource": policy[1], "action": policy[2]}
+            for policy in policies
+        ]
+    
+    return PermissionsResponse(
+        role=role,
+        is_superuser=False,
+        permissions=permissions
+    )

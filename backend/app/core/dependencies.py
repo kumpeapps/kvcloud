@@ -4,11 +4,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from functools import wraps
 from typing import Callable
+import logging
 
 from app.core.database import get_db
 from app.core.security import oauth2_scheme, decode_access_token
 from app.models.user import User
-from app.core.rbac import enforcer
+from app.core.rbac import get_rbac
+
+logger = logging.getLogger(__name__)
 
 
 async def get_current_user(
@@ -80,11 +83,21 @@ def require_permission(resource: str, action: str) -> Callable:
             if current_user.is_superuser:
                 return await func(*args, **kwargs)
             
+            # Get RBAC manager and enforcer
+            rbac_manager = get_rbac()
+            if not rbac_manager or not rbac_manager.enforcer:
+                logger.warning("RBAC enforcer not initialized, denying access")
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="RBAC system not available"
+                )
+            
             # Check permission using Casbin
-            role = current_user.role if hasattr(current_user, 'role') else 'user'
-            has_permission = enforcer.enforce(role, resource, action)
+            role = current_user.role if hasattr(current_user, 'role') and current_user.role else 'user'
+            has_permission = rbac_manager.check_permission(role, resource, action)
             
             if not has_permission:
+                logger.warning(f"Permission denied: user={current_user.username}, role={role}, resource={resource}, action={action}")
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail=f"Permission denied: {resource}:{action}"

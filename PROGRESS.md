@@ -1,10 +1,121 @@
 # KVCloud Progress Tracker
 
-**Last Updated**: December 20, 2025
+**Last Updated**: January 11, 2026
 
 ---
 
 ## ✅ Completed
+
+### Session 9.0: RBAC & Permission System (January 11, 2026) - Complete
+- [x] **Backend: RBAC Enforcer Initialization**
+  - Fixed Casbin enforcer dependency injection in `dependencies.py`
+  - Added null checks for enforcer availability
+  - Proper error handling with 503 Service Unavailable
+  - File: `backend/app/core/dependencies.py`
+
+- [x] **Backend: Permission Decorator Implementation**
+  - Enhanced `@require_permission(resource, action)` decorator
+  - Integrated with RBAC manager via `get_rbac()`
+  - Superuser bypass for all endpoints
+  - Comprehensive logging for permission denials
+  - Returns 403 Forbidden for unauthorized access
+  - File: `backend/app/core/dependencies.py`
+
+- [x] **Backend: Expanded RBAC Policies**
+  - Extended policy coverage from 25 to 65+ rules
+  - Added comprehensive permissions for all resources:
+    - VM operations: read, create, start, stop, restart, delete, update, console, pause, resume, shutdown, reset, clone, lock, unlock
+    - Cluster/Node: read
+    - Storage: disk, network, template operations
+    - User management: full CRUD
+    - ISO/Snapshot/Backup: full CRUD
+    - Firewall: create, read, update, delete
+    - Cloud-init/SSH-key: full CRUD
+    - Metrics/Task/Agent: read and execute
+  - Three predefined roles: admin, user, viewer
+  - File: `backend/app/core/rbac_policy.csv` (65 rules)
+
+- [x] **Backend: Permissions API Endpoint**
+  - Created `GET /auth/permissions` endpoint
+  - Returns user role, superuser status, and permission list
+  - Frontend uses this to fetch and cache permissions
+  - Response includes all granted resource:action pairs
+  - File: `backend/app/api/auth.py`
+
+- [x] **Frontend: AuthService Enhancement**
+  - Updated to fetch permissions from backend API
+  - Caching of user permissions in signal
+  - Dynamic permission evaluation based on backend data
+  - Fallback graceful handling if permissions unavailable
+  - File: `frontend/src/app/core/services/auth.service.ts`
+
+- [x] **Frontend: Permission Directive Integration**
+  - Existing `HasPermissionDirective` already implemented
+  - Handles conditional rendering based on permissions
+  - Reactive updates when user permissions change
+  - Usage: `*hasPermission="{ resource: 'vm', action: 'create' }"`
+  - File: `frontend/src/app/core/directives/has-permission.directive.ts`
+
+- [x] **Frontend: Route Guards & Protection**
+  - Existing `permissionGuard` already implemented
+  - Protects routes based on required permissions
+  - Redirects to dashboard if permission denied
+  - Usage: `data: { permission: { resource: 'vm', action: 'create' } }`
+  - File: `frontend/src/app/core/guards/role.guard.ts`
+
+- [x] **Frontend: Component Permission Checks**
+  - VMs component already uses `*hasPermission` directive
+  - Hide/show buttons based on user permissions
+  - Disable action buttons for unauthorized users
+  - Create VM button only visible to users with vm:create
+  - File: `frontend/src/app/features/vms/vms.component.html`
+
+- [x] **Documentation: RBAC Configuration Guide**
+  - Added comprehensive RBAC section to ADMIN_GUIDE.md
+  - Documented all 18 supported resources
+  - Listed supported actions (read, create, update, delete, etc.)
+  - Explained default roles (admin, user, viewer)
+  - API permission enforcement flow
+  - Frontend permission checks (directives, guards, service)
+  - Custom role creation (web UI and policy file)
+  - Permission examples and customization
+  - Permission matrix table
+  - Troubleshooting guide
+  - File: `docs/ADMIN_GUIDE.md`
+
+**Implementation Summary:**
+Completed full RBAC enforcement system with backend API permission checks, expanded policy coverage, frontend integration, and comprehensive documentation. System now enforces fine-grained permissions at both API and UI levels with three predefined roles and ability to create custom roles.
+
+### Session 8.9: VNC Console Implementation (January 10, 2026) - Complete
+
+- [x] **Backend: VNC WebSocket Proxy**
+  - Created WebSocket endpoint at `/vnc/proxy/{node_id}/{vmid}`
+  - Proxmox authentication flow (access/ticket + vncproxy endpoints)
+  - Bidirectional WebSocket proxying between frontend and Proxmox
+  - URL encoding for vncticket special characters
+  - PVEAuthCookie header authentication
+  - SSL context configuration for Proxmox connections
+  - Error handling and logging for debugging
+  - File: `backend/app/api/vnc_proxy.py`
+
+- [x] **Frontend: VNC Console Component**
+  - noVNC library integration via CDN (core + app bundles)
+  - VM console component with fullscreen support
+  - WebSocket connection through Angular dev proxy
+  - Responsive viewport scaling (scaleViewport=true)
+  - Mouse capture/release on fullscreen toggle
+  - Fullscreen state management with event listeners
+  - Pointer lock release when exiting fullscreen
+  - Console sizing: calc(100vh - 200px) with 600px minimum
+  - Dark background theme for console display
+  - File: `frontend/src/app/features/vms/vm-console/vm-console.component.ts`
+
+- [x] **Configuration: Angular Proxy & noVNC**
+  - Updated proxy.conf.json for WebSocket upgrade support
+  - Added noVNC scripts to angular.json (core.js + app.js)
+  - Configured pathRewrite for /api → backend routing
+  - WebSocket support enabled with ws: true
+  - File: `frontend/proxy.conf.json`, `frontend/angular.json`
 
 ### Session 8.8: Firewall & Historical Monitoring (December 20, 2025) - Complete
 - [x] **Backend: VM Firewall Management**

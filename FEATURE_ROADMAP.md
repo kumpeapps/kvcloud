@@ -64,26 +64,34 @@
 
 ## 🚧 In Progress / Recently Completed
 
-### VNC Console (80% Complete - Authentication Blocked)
+### RBAC & Permissions ✅ COMPLETED (January 11, 2026)
+- [x] Casbin enforcer initialization and dependency injection
+- [x] `@require_permission` decorator for API endpoints
+- [x] RBAC policy expansion (65+ rules, 3 default roles)
+- [x] `/auth/permissions` endpoint for frontend
+- [x] Frontend permission directive (`*hasPermission`)
+- [x] Frontend route guards (`permissionGuard`)
+- [x] AuthService permission fetching and caching
+- [x] Permission matrix (admin, user, viewer roles)
+- [x] API enforcement with proper error responses (403 Forbidden)
+- [x] Comprehensive admin documentation
+- **Status**: Feature complete and tested
+- Files: 
+  - Backend: `backend/app/core/dependencies.py`, `backend/app/core/rbac_policy.csv`, `backend/app/api/auth.py`
+  - Frontend: `frontend/src/app/core/services/auth.service.ts`, `frontend/src/app/core/directives/has-permission.directive.ts`, `frontend/src/app/core/guards/role.guard.ts`
+  - Documentation: `docs/ADMIN_GUIDE.md` (RBAC section expanded)
+
+### VNC Console ✅ COMPLETED (January 10, 2026)
 - [x] noVNC library integration (CDN/ESM)
-- [x] WebSocket proxy infrastructure
-- [x] Frontend component with error handling
-- [ ] **BLOCKED**: Proxmox VNC WebSocket HTTP 401 authentication
-- **Next**: Requires HTTPS deployment or iframe alternative
-
-### RBAC & Permissions (Priority: HIGH)
-- [ ] **Casbin enforcement across all API endpoints**
-  - Files: `backend/app/core/rbac.py`, `backend/app/core/dependencies.py`
-  - Implement: `@require_permission("vm:start")` decorator
-  - Roles: admin, user, viewer, reseller
-  - Model: `/backend/app/core/rbac_model.conf`
-  - Policy: Store in database (casbin-sqlalchemy-adapter)
-
-- [ ] **Frontend RBAC guards**
-  - Files: `frontend/src/app/core/guards/role.guard.ts`
-  - Hide/show menu items based on permissions
-  - Disable actions user lacks permission for
-  - Check permissions: `hasPermission('vm:delete')`
+- [x] WebSocket proxy infrastructure with FastAPI
+- [x] Frontend component with error handling and fullscreen support
+- [x] Authentication flow (Proxmox ticket + PVEAuthCookie)
+- [x] Bidirectional WebSocket proxying through backend
+- [x] Mouse capture/release on fullscreen toggle
+- [x] Responsive scaling and viewport sizing
+- [x] Real-time VM console access via browser
+- **Status**: Feature complete and working
+- Files: `backend/app/api/vnc_proxy.py`, `frontend/src/app/features/vms/vm-console/`
 
 ### API Parity
 - [ ] **Complete VM lifecycle endpoints**
@@ -128,16 +136,17 @@
   - API: `POST /vms/node/{node_id}/vm/{vmid}/stop` (hard power off)
   - UI: Power Off (Hard) action in VM detail operations
 
-#### 1.2 VM Console Access
-- [~] **VNC Console Integration** (80% Complete - Blocked)
-  - [x] API: VNC ticket generation implemented
+#### 1.2 VM Console Access ✅ COMPLETED (January 10, 2026)
+- [x] **VNC Console Integration** - DONE
+  - [x] API: VNC ticket generation with Proxmox authentication
   - [x] Frontend: noVNC library integration (CDN)
-  - [x] WebSocket proxy for VNC connections (`backend/app/api/vnc_proxy.py`)
-  - [x] Frontend component with error handling
-  - [ ] **BLOCKED**: Proxmox VNC WebSocket HTTP 401 authentication issue
-  - **Status**: Infrastructure complete, requires HTTPS deployment or iframe alternative
-  - Files: `frontend/src/app/features/vms/vnc-console/`
-  - Reference: `/root/enduser/vnc.php`
+  - [x] WebSocket proxy with bidirectional data forwarding
+  - [x] URL-encoded ticket handling for special characters
+  - [x] Frontend component with fullscreen, scaling, mouse capture/release
+  - [x] Angular dev proxy configuration for WebSocket upgrade
+  - [x] Complete authentication flow (ticket + cookie headers)
+  - **Status**: Fully functional console access via browser
+  - Files: `backend/app/api/vnc_proxy.py`, `frontend/src/app/features/vms/vm-console/`
 
 - [ ] **SSH Terminal (optional)**
   - Web-based SSH terminal

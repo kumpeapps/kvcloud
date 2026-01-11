@@ -205,81 +205,311 @@ EOF
 
 ## RBAC Configuration
 
+### Overview
+
+KVCloud uses **Casbin** for Role-Based Access Control (RBAC). This system provides fine-grained permission management across all resources.
+
 ### Permission System
 
-KVCloud uses Casbin for RBAC with 19 predefined permissions:
+Permissions follow the **Resource:Action** format:
 
-**Resource:Action Format**:
-- `vm:create` - Create VMs
-- `vm:read` - View VMs
-- `vm:update` - Modify VMs
-- `vm:delete` - Delete VMs
-- `vm:start` - Start VMs
-- `vm:stop` - Stop VMs
-- `vm:restart` - Restart VMs
-- `user:*` - All user operations
-- `cluster:*` - All cluster operations
-- `*:*` - All permissions (admin only)
+**Supported Resources**:
+- `vm` - Virtual machines
+- `cluster` - Proxmox clusters
+- `node` - Cluster nodes
+- `user` - User management
+- `role` - Role management
+- `iso` - ISO images
+- `snapshot` - VM snapshots
+- `ippool` - IP address pools
+- `backup` - Backup operations
+- `firewall` - Firewall rules
+- `disk` - Storage disks
+- `network` - Network interfaces
+- `template` - VM templates
+- `metrics` - Performance metrics
+- `cloud-init` - Cloud-init profiles
+- `ssh-key` - SSH key management
+- `task` - Background tasks
+- `agent` - QEMU guest agent
+- `*` - All resources (admin only)
+
+**Supported Actions**:
+- `read` - View resource
+- `create` - Create new resource
+- `update` - Modify resource
+- `delete` - Remove resource
+- `start`, `stop`, `restart` - VM lifecycle
+- `pause`, `resume`, `shutdown`, `reset` - Additional VM operations
+- `console` - Access VM console
+- `lock`, `unlock` - Lock/unlock VMs
+- `clone` - Clone VM
+- `allocate`, `deallocate` - IP pool operations
+- `rollback` - Snapshot rollback
+- `restore` - Backup restore
+- `execute` - Execute agent commands
+- `*` - All actions (wildcard)
+
+### Default Roles
+
+#### Admin Role
+- **Permissions**: `admin, *, *` (all resources, all actions)
+- **Description**: Full system access
+- **Users**: System administrators only
+
+#### User Role
+- **Key Permissions**:
+  - `user, vm, *` - All VM operations
+  - `user, snapshot, *` - All snapshot operations
+  - `user, backup, *` - All backup operations
+  - `user, cluster, read` - View clusters
+  - `user, node, read` - View nodes
+  - `user, ippool, *` - All IP pool operations
+  - `user, firewall, *` - All firewall operations
+  - `user, disk, *` - All disk operations
+  - `user, network, *` - All network operations
+  - `user, iso, read` - View ISOs
+  - `user, template, *` - All template operations
+  - `user, metrics, read` - View metrics
+  - `user, cloud-init, *` - All cloud-init operations
+  - `user, ssh-key, *` - All SSH key operations
+  - `user, task, read` - View background tasks
+  - `user, agent, *` - All agent operations
+- **Description**: Standard user with operational access
+
+#### Viewer Role
+- **Key Permissions**:
+  - `viewer, vm, read` - View VMs only
+  - `viewer, vm, console` - Access VM console
+  - `viewer, snapshot, read` - View snapshots
+  - `viewer, cluster, read` - View clusters
+  - `viewer, node, read` - View nodes
+  - `viewer, backup, read` - View backups
+  - `viewer, firewall, read` - View firewall rules
+  - `viewer, metrics, read` - View metrics
+  - Other read-only permissions
+- **Description**: Read-only access, can view console
+
+### API Permission Enforcement
+
+The backend enforces permissions at the API endpoint level using the `@require_permission` decorator:
+
+```python
+from app.core.dependencies import require_permission
+
+@router.get("/vms/{vm_id}")
+@require_permission("vm", "read")
+async def get_vm(vm_id: int, current_user: User = Depends(get_current_user)):
+    # This endpoint requires vm:read permission
+    ...
+```
+
+**Permission Check Flow**:
+1. User authenticates with JWT token
+2. Endpoint checks if user is superuser (bypasses all checks)
+3. Endpoint retrieves user's role
+4. Casbin enforces permission: `enforce(user_role, resource, action)`
+5. Returns 403 Forbidden if permission denied, 200 OK if allowed
+
+### Frontend Permission Checks
+
+The frontend uses permission directives and guards to show/hide UI elements:
+
+**Permission Directive** (Hide/Show Elements):
+```html
+<!-- Show button only if user has vm:create permission -->
+<button *hasPermission="{ resource: 'vm', action: 'create' }">
+  Create VM
+</button>
+
+<!-- Show read-only content for viewers -->
+<div *hasPermission="{ resource: 'vm', action: 'update' }; else viewerContent">
+  <button (click)="updateVM()">Update VM</button>
+</div>
+<ng-template #viewerContent>
+  <p>VM details (read-only)</p>
+</ng-template>
+```
+
+**Permission Guard** (Protect Routes):
+```typescript
+// In app.routes.ts
+const routes: Routes = [
+  {
+    path: 'vms/create',
+    component: CreateVMComponent,
+    canActivate: [permissionGuard],
+    data: { permission: { resource: 'vm', action: 'create' } }
+  }
+];
+```
+
+**Permission Service** (Programmatic Checks):
+```typescript
+import { PermissionService } from './core/services/permission.service';
+
+export class MyComponent {
+  constructor(private permissionService: PermissionService) {}
+
+  canCreateVM(): boolean {
+    return this.permissionService.hasPermission('vm', 'create');
+  }
+
+  canAccessRoute(resource: string): boolean {
+    return this.permissionService.canAccessRoute(resource);
+  }
+}
+```
 
 ### Creating Custom Roles
 
-**Via Web Interface**:
+#### Via Web Interface
+
 1. Navigate to **Roles** → **Create Role**
-2. Enter role name and description
-3. Select permissions:
-   - Check individual permissions
-   - Or use wildcards (`vm:*` for all VM operations)
+2. Enter role name (e.g., "operator")
+3. Select permissions you want to grant:
+   - Check individual permissions (e.g., vm:start, vm:stop)
+   - Or use wildcards (e.g., vm:* for all VM permissions)
 4. Click **Create**
 
-**Via Policy File**:
+#### Via Policy File
 
 Edit `backend/app/core/rbac_policy.csv`:
 
 ```csv
-# Role permissions
-p, operator, vm, create
+# Example: Create "operator" role with limited permissions
+p, operator, vm, read
 p, operator, vm, start
 p, operator, vm, stop
 p, operator, vm, restart
 p, operator, cluster, read
+p, operator, node, read
 
-# Role inheritance
-g, alice, operator
-g, bob, admin
-
-# Admin has everything
-p, admin, *, *
+# Assign user to role
+g, operator_user1, operator
+g, operator_user2, operator
 ```
 
-After editing, restart backend:
+After editing, restart the backend:
 ```bash
 docker-compose restart backend
 ```
 
-### Assigning Roles to Users
+### Customizing Permissions
 
-1. Navigate to **Users**
-2. Click on user
-3. Click **Edit**
-4. Select role from dropdown
-5. Click **Save**
+#### Example 1: Allow Users to Create VMs
 
-### Permission Hierarchy
-
+```csv
+p, user, vm, create
 ```
-admin (superuser)
-  └─ All permissions (*)
-  
-user (standard)
-  ├─ vm:read, vm:create, vm:start, vm:stop, vm:restart
-  ├─ cluster:read
-  └─ user:read (own profile only)
-  
-viewer (read-only)
-  ├─ vm:read
-  ├─ cluster:read
-  └─ user:read (own profile only)
+
+#### Example 2: Create "Support" Role (View-Only Console Access)
+
+```csv
+p, support, vm, read
+p, support, vm, console
+p, support, cluster, read
+p, support, node, read
 ```
+
+#### Example 3: Create "Manager" Role (Full VM + User Management)
+
+```csv
+p, manager, vm, *
+p, manager, snapshot, *
+p, manager, backup, *
+p, manager, user, read
+p, manager, cluster, read
+p, manager, node, read
+```
+
+Assign user to manager role:
+```csv
+g, alice, manager
+```
+
+### Checking User Permissions
+
+**Via API**:
+```bash
+# Get current user's permissions
+curl -X GET https://localhost:8000/auth/permissions \
+  -H "Authorization: Bearer <token>"
+
+# Response:
+{
+  "role": "user",
+  "is_superuser": false,
+  "permissions": [
+    {"resource": "vm", "action": "read"},
+    {"resource": "vm", "action": "create"},
+    {"resource": "vm", "action": "delete"},
+    ...
+  ]
+}
+```
+
+**Via Web Interface**:
+1. Click on your username (top-right)
+2. Navigate to **Profile**
+3. You'll see your role and assigned permissions
+
+### Permission Denial Handling
+
+When a user lacks required permissions:
+
+**API Response**:
+```json
+{
+  "detail": "Permission denied: vm:delete"
+}
+HTTP 403 Forbidden
+```
+
+**Frontend Behavior**:
+- Button/Menu item is hidden (with `*hasPermission`)
+- Route is redirected to dashboard (with `permissionGuard`)
+- Error message shown if action attempted
+
+### Troubleshooting RBAC Issues
+
+**Problem**: User cannot see button despite having permission
+- **Solution**: Check that `HasPermissionDirective` is imported in component
+- **Solution**: Verify permission format is correct (resource:action)
+- **Solution**: Clear browser cache and reload
+
+**Problem**: API returns 403 Forbidden unexpectedly
+- **Solution**: Check Casbin policies in `rbac_policy.csv`
+- **Solution**: Verify user's role is correctly assigned
+- **Solution**: Check backend logs: `docker-compose logs backend | grep Permission`
+
+**Problem**: New role doesn't work after editing policy file
+- **Solution**: Restart backend: `docker-compose restart backend`
+- **Solution**: Check for syntax errors in CSV file
+- **Solution**: Verify `casbin_rule` database table has been updated
+
+### Permission Matrix
+
+| Resource | Admin | User | Viewer |
+|----------|-------|------|--------|
+| vm | * | create, read, start, stop, restart, delete, update, console, pause, resume, shutdown, reset, clone, lock, unlock | read, console |
+| snapshot | * | create, read, delete, rollback | read |
+| backup | * | create, read, restore, delete | read |
+| cluster | * | read | read |
+| node | * | read | read |
+| user | * | read (own) | read (own) |
+| role | * | read | - |
+| iso | * | read | read |
+| firewall | * | create, read, update, delete | read |
+| ippool | * | read, allocate, deallocate | read |
+| disk | * | create, read, resize, delete | read |
+| network | * | create, read, update, delete | read |
+| template | * | create, read | read |
+| metrics | * | read | read |
+| cloud-init | * | create, read, update, delete | read |
+| ssh-key | * | create, read, delete | read |
+| task | * | read | read |
+| agent | * | read, execute | read |
 
 ---
 
