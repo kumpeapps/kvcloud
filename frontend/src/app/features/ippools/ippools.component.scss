@@ -126,3 +126,11 @@
     }
   }
 }
+
+// Dark theme support
+:host-context(.dark-theme) {
+  .dialog-container {
+    background: #1e1e1e;
+    color: #e0e0e0;
+  }
+}
