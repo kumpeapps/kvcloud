@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -61,8 +61,7 @@ export interface IPAllocateRequest {
 })
 export class IPPoolService {
   private apiUrl = `${environment.apiUrl}/ippools/`;
-
-  constructor(private http: HttpClient) {}
+  private http = inject(HttpClient);
 
   listPools(): Observable<IPPool[]> {
     return this.http.get<IPPool[]>(this.apiUrl);

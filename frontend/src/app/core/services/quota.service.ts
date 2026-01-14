@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -59,8 +59,7 @@ export interface CreateQuotaRequest {
 })
 export class QuotaService {
   private apiUrl = `${environment.apiUrl}/quotas`;
-
-  constructor(private http: HttpClient) {}
+  private http = inject(HttpClient);
 
   getUserQuota(userId: number): Observable<UserQuota> {
     return this.http.get<UserQuota>(`${this.apiUrl}/user/${userId}`);

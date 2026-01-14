@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -6,7 +6,7 @@ import { environment } from '../../../environments/environment';
 @Injectable({ providedIn: 'root' })
 export class VmUserService {
   private apiUrl = environment.apiUrl;
-  constructor(private http: HttpClient) {}
+  private http = inject(HttpClient);
 
   createVmUser(vmId: number, nodeId: number, username: string, password: string | null, shell: string, sudoAccess: boolean, description: string | null, sshKeyIds: number[]): Observable<any> {
     return this.http.post(`${this.apiUrl}/vm-users/`, {

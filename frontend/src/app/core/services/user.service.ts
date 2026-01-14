@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -38,8 +38,7 @@ export interface UpdateUserRequest {
 })
 export class UserService {
   private apiUrl = `${environment.apiUrl}/users`;
-
-  constructor(private http: HttpClient) {}
+  private http = inject(HttpClient);
 
   getUsers(skip: number = 0, limit: number = 100): Observable<User[]> {
     return this.http.get<User[]>(`${this.apiUrl}/`, {

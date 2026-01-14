@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -28,8 +28,7 @@ export interface SnapshotResponse {
 })
 export class SnapshotService {
   private apiUrl = `${environment.apiUrl}/snapshots`;
-
-  constructor(private http: HttpClient) {}
+  private http = inject(HttpClient);
 
   listSnapshots(nodeId: number, vmid: number): Observable<Snapshot[]> {
     return this.http.get<Snapshot[]>(`${this.apiUrl}/nodes/${nodeId}/vms/${vmid}`);

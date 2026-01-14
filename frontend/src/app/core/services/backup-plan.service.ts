@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -63,8 +63,7 @@ export interface CreateBackupPlanRequest {
 })
 export class BackupPlanService {
   private apiUrl = `${environment.apiUrl}/backup-plans`;
-
-  constructor(private http: HttpClient) {}
+  private http = inject(HttpClient);
 
   getPlans(vmid?: number, nodeId?: number): Observable<BackupPlan[]> {
     let params: any = {};

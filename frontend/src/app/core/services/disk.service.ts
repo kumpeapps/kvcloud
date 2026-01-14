@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -31,8 +31,7 @@ export interface ResizeDiskRequest {
 })
 export class DiskService {
   private apiUrl = `${environment.apiUrl}/vms`;
-
-  constructor(private http: HttpClient) {}
+  private http = inject(HttpClient);
 
   listDisks(nodeId: number, vmid: number): Observable<VMDisk[]> {
     return this.http.get<VMDisk[]>(`${this.apiUrl}/node/${nodeId}/vm/${vmid}/disks`);

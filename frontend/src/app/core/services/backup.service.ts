@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -48,8 +48,7 @@ export interface BackupRestoreResponse {
 })
 export class BackupService {
   private apiUrl = `${environment.apiUrl}/backups`;
-
-  constructor(private http: HttpClient) {}
+  private http = inject(HttpClient);
 
   /**
    * Create a backup of a VM

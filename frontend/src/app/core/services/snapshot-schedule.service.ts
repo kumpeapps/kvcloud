@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -52,8 +52,7 @@ export interface CreateSnapshotScheduleRequest {
 })
 export class SnapshotScheduleService {
   private apiUrl = `${environment.apiUrl}/snapshot-schedules`;
-
-  constructor(private http: HttpClient) {}
+  private http = inject(HttpClient);
 
   getSchedules(vmid?: number, nodeId?: number): Observable<SnapshotSchedule[]> {
     let params: any = {};

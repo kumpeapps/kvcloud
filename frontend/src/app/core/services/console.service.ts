@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -28,8 +28,7 @@ export interface SPICEConfig {
 })
 export class ConsoleService {
   private apiUrl = `${environment.apiUrl}/console`;
-
-  constructor(private http: HttpClient) {}
+  private http = inject(HttpClient);
 
   getVNCConnection(nodeId: number, vmid: number): Observable<VNCConnection> {
     return this.http.get<VNCConnection>(`${this.apiUrl}/vnc/nodes/${nodeId}/vms/${vmid}`);

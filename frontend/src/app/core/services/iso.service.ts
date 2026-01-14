@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -47,8 +47,7 @@ export interface TaskStatus {
 })
 export class ISOService {
   private apiUrl = `${environment.apiUrl}/isos`;
-
-  constructor(private http: HttpClient) {}
+  private http = inject(HttpClient);
 
   listNodeISOs(nodeId: number): Observable<ISO[]> {
     return this.http.get<ISO[]>(`${this.apiUrl}/nodes/${nodeId}`);

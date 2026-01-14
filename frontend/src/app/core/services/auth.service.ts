@@ -1,4 +1,4 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -34,11 +34,12 @@ interface UserPermissions {
 })
 export class AuthService {
   private apiUrl = environment.apiUrl;
+  private http = inject(HttpClient);
   currentUser = signal<User | null>(null);
   isAuthenticated = signal<boolean>(false);
   private userPermissions = signal<UserPermissions | null>(null);
 
-  constructor(private http: HttpClient) {
+  constructor() {
     // Check if we have a token on init
     const token = this.getToken();
     if (token) {
