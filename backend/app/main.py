@@ -14,7 +14,7 @@ from app.core.init_rbac import init_rbac_policies
 from app.core.audit_middleware import AuditMiddleware
 from app.plugins.base import plugin_manager
 from app.modules.base import module_manager
-from app.api import auth, clusters, vms, users, roles, ippools, isos, snapshots, metrics, console, vnc_proxy, backups, snapshot_schedules, audit_logs, quotas, backup_plans, firewall, metric_history, plans, vm_requests, cloud_init, ssh_keys, vm_users, cloud_images, provision, templates, tasks, agent
+from app.api import auth, clusters, vms, users, roles, ippools, isos, snapshots, metrics, console, vnc_proxy, backups, snapshot_schedules, audit_logs, quotas, backup_plans, firewall, metric_history, plans, vm_requests, cloud_init, ssh_keys, vm_users, cloud_images, provision, templates, tasks, agent, notifications
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +128,7 @@ app.include_router(vnc_proxy.router)
 app.include_router(backups.router)
 app.include_router(plans.router)
 app.include_router(vm_requests.router)
+app.include_router(notifications.router)
 app.include_router(cloud_init.router)
 app.include_router(ssh_keys.router)
 app.include_router(vm_users.router)

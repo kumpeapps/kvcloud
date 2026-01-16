@@ -1,0 +1,182 @@
+<div class="notifications-container">
+  <!-- Header -->
+  <div class="page-header">
+    <h1>
+      <mat-icon>notifications</mat-icon>
+      Notifications
+    </h1>
+    <div class="header-actions">
+      <button mat-raised-button color="primary" (click)="markAllAsRead()" [disabled]="unreadCount === 0">
+        <mat-icon>done_all</mat-icon>
+        Mark All Read
+      </button>
+      <button mat-raised-button (click)="deleteAllRead()" [disabled]="totalCount === unreadCount">
+        <mat-icon>delete_sweep</mat-icon>
+        Delete Read
+      </button>
+    </div>
+  </div>
+
+  <!-- Statistics Cards -->
+  <div class="stats-cards">
+    <mat-card>
+      <mat-card-header>
+        <mat-icon>notifications</mat-icon>
+        <mat-card-title>Total</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="stat-value">{{ totalCount }}</div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card>
+      <mat-card-header>
+        <mat-icon color="primary">notifications_active</mat-icon>
+        <mat-card-title>Unread</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="stat-value primary">{{ unreadCount }}</div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card>
+      <mat-card-header>
+        <mat-icon>check_circle</mat-icon>
+        <mat-card-title>Read</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="stat-value">{{ totalCount - unreadCount }}</div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <!-- Filters -->
+  <mat-card class="filters-card">
+    <mat-card-header>
+      <mat-card-title>
+        <mat-icon>filter_list</mat-icon>
+        Filters
+      </mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <form [formGroup]="filterForm" class="filters-form">
+        <mat-form-field appearance="outline">
+          <mat-label>Search</mat-label>
+          <input matInput formControlName="search" placeholder="Search in title or message...">
+          <mat-icon matPrefix>search</mat-icon>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Type</mat-label>
+          <mat-select formControlName="type">
+            <mat-option value="">All Types</mat-option>
+            <mat-option *ngFor="let type of notificationTypes" [value]="type.value">
+              {{ type.label }}
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Resource</mat-label>
+          <mat-select formControlName="resource_type">
+            <mat-option value="">All Resources</mat-option>
+            <mat-option *ngFor="let resource of resourceTypes" [value]="resource.value">
+              {{ resource.label }}
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Status</mat-label>
+          <mat-select formControlName="is_read">
+            <mat-option value="">All</mat-option>
+            <mat-option value="false">Unread</mat-option>
+            <mat-option value="true">Read</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <button mat-stroked-button type="button" (click)="clearFilters()">
+          <mat-icon>clear</mat-icon>
+          Clear Filters
+        </button>
+      </form>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Notifications List -->
+  <mat-card class="notifications-card">
+    <mat-card-header>
+      <mat-card-title>
+        <mat-icon>list</mat-icon>
+        Notifications ({{ totalNotifications }})
+      </mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <div *ngIf="loading" class="loading-state">
+        <mat-spinner diameter="50"></mat-spinner>
+        <p>Loading notifications...</p>
+      </div>
+
+      <div *ngIf="!loading && displayedNotifications.length === 0" class="empty-state">
+        <mat-icon>notifications_off</mat-icon>
+        <h3>No notifications found</h3>
+        <p>{{ filterForm.value.search || filterForm.value.type || filterForm.value.resource_type || filterForm.value.is_read !== '' ? 'Try adjusting your filters' : 'You have no notifications yet' }}</p>
+      </div>
+
+      <div *ngIf="!loading && displayedNotifications.length > 0" class="notifications-list">
+        <div *ngFor="let notification of displayedNotifications" 
+             class="notification-item"
+             [class.unread]="!notification.is_read"
+             (click)="handleNotificationClick(notification)">
+          
+          <div class="notification-icon" [style.color]="getTypeColor(notification.type)">
+            <mat-icon>{{ getTypeIcon(notification.type) }}</mat-icon>
+          </div>
+          
+          <div class="notification-content">
+            <div class="notification-header">
+              <h3 class="notification-title">{{ notification.title }}</h3>
+              <span class="notification-time">{{ formatTime(notification.created_at) }}</span>
+            </div>
+            
+            <p class="notification-message">{{ notification.message }}</p>
+            
+            <div class="notification-meta">
+              <mat-chip class="notification-type" [style.background-color]="getTypeColor(notification.type) + '20'" [style.color]="getTypeColor(notification.type)">
+                {{ notification.type }}
+              </mat-chip>
+              <mat-chip *ngIf="notification.resource_type" class="notification-resource">
+                {{ notification.resource_type }}
+              </mat-chip>
+            </div>
+          </div>
+          
+          <div class="notification-actions">
+            <button mat-icon-button 
+                    *ngIf="!notification.is_read"
+                    (click)="markAsRead(notification, $event)"
+                    matTooltip="Mark as read">
+              <mat-icon>done</mat-icon>
+            </button>
+            <button mat-icon-button 
+                    (click)="deleteNotification(notification, $event)"
+                    matTooltip="Delete"
+                    color="warn">
+              <mat-icon>delete</mat-icon>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pagination -->
+      <mat-paginator *ngIf="!loading && totalNotifications > 0"
+                     [length]="totalNotifications"
+                     [pageSize]="pageSize"
+                     [pageSizeOptions]="pageSizeOptions"
+                     [pageIndex]="pageIndex"
+                     (page)="onPageChange($event)"
+                     showFirstLastButtons>
+      </mat-paginator>
+    </mat-card-content>
+  </mat-card>
+</div>

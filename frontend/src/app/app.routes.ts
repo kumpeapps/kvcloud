@@ -81,6 +81,10 @@ export const routes: Routes = [
         loadChildren: () => import('./features/audit-logs/audit-logs.routes').then(m => m.AUDIT_LOG_ROUTES)
       },
       {
+        path: 'notifications',
+        loadComponent: () => import('./features/notifications/notifications.component').then(m => m.NotificationsComponent)
+      },
+      {
         path: 'templates',
         loadChildren: () => import('./features/templates/templates.routes').then(m => m.TEMPLATES_ROUTES)
       },

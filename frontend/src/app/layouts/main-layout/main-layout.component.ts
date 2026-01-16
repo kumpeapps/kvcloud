@@ -3,8 +3,11 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { CommonModule } from '@angular/common';
 import { RouterOutlet, RouterLink } from '@angular/router';
 import { MaterialModule } from '../../shared/material.module';
-import { AuthService } from '../../core/services/auth.service';import { BreadcrumbComponent } from '../../shared/components/breadcrumb/breadcrumb.component';import { Router } from '@angular/router';
+import { AuthService } from '../../core/services/auth.service';
+import { BreadcrumbComponent } from '../../shared/components/breadcrumb/breadcrumb.component';
+import { Router } from '@angular/router';
 import { TasksService, TaskStatus } from '../../core/services/tasks.service';
+import { NotificationService } from '../../core/services/notification.service';
 import { timer } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 
@@ -33,6 +36,7 @@ export class MainLayoutComponent {
     { icon: 'computer', label: 'Virtual Machines', route: '/vms' },
     { icon: 'inventory_2', label: 'Templates', route: '/templates' },
     { icon: 'list', label: 'Tasks', route: '/tasks', badge: 0 },
+    { icon: 'notifications', label: 'Notifications', route: '/notifications' },
     { icon: 'photo_library', label: 'Snapshots', route: '/snapshots' },
     { icon: 'schedule', label: 'Snapshot Schedules', route: '/snapshot-schedules' },
     { icon: 'backup', label: 'Backup Plans', route: '/backup-plans' },
@@ -54,6 +58,7 @@ export class MainLayoutComponent {
     public authService: AuthService,
     public router: Router,
     private tasksService: TasksService,
+    public notificationService: NotificationService,
     private snackBar: MatSnackBar
   ) {
     // Load theme preference from localStorage, default to dark
@@ -145,5 +150,62 @@ export class MainLayoutComponent {
     if (!item.requiredRole) return true;
     const user = this.authService.currentUser();
     return user?.is_superuser || false;
+  }
+  
+  // Notification methods
+  handleNotificationClick(notification: any): void {
+    // Mark as read
+    if (!notification.is_read) {
+      this.notificationService.markAsRead(notification.id).subscribe();
+    }
+    
+    // Navigate to action URL if provided
+    if (notification.action_url) {
+      this.router.navigate([notification.action_url]);
+    }
+  }
+  
+  markAllNotificationsRead(): void {
+    this.notificationService.markAllAsRead().subscribe({
+      next: () => {
+        this.snackBar.open('All notifications marked as read', 'Close', { duration: 2000 });
+      },
+      error: (error) => {
+        console.error('Error marking notifications as read:', error);
+        this.snackBar.open('Failed to mark notifications as read', 'Close', { duration: 3000 });
+      }
+    });
+  }
+  
+  deleteNotification(id: number, event: Event): void {
+    event.stopPropagation();
+    this.notificationService.deleteNotification(id).subscribe({
+      next: () => {
+        this.snackBar.open('Notification deleted', 'Close', { duration: 2000 });
+      },
+      error: (error) => {
+        console.error('Error deleting notification:', error);
+        this.snackBar.open('Failed to delete notification', 'Close', { duration: 3000 });
+      }
+    });
+  }
+  
+  viewAllNotifications(): void {
+    this.router.navigate(['/notifications']);
+  }
+  
+  formatTime(timestamp: string): string {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
   }
 }

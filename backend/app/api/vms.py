@@ -17,6 +17,7 @@ from app.core.tasks_store import active_tasks, archive_task
 # Avoid potential local shadowing issues by importing the module and referencing the class via the module.
 from app.services import proxmox as proxmox_service
 from app.models.compose_template import ComposeTemplate
+from app.services.notification_service import NotificationService
 
 # Provide a safe alias for existing usages to avoid NameError in endpoints still
 # referencing `ProxmoxService` directly. Prefer module-qualified references for
@@ -298,6 +299,21 @@ async def start_vm(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to start VM"
         )
+    
+    # Create notification
+    try:
+        await NotificationService.create_vm_notification(
+            db=db,
+            user_id=current_user.id,
+            vm_id=vmid,
+            action="started",
+            type="success",
+            details=f"VM {vmid} start command sent successfully"
+        )
+    except Exception as e:
+        # Don't fail the request if notification creation fails
+        print(f"Failed to create notification: {e}")
+    
     return {"message": "VM start command sent"}
 
 
@@ -325,6 +341,21 @@ async def stop_vm(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to stop VM"
         )
+    
+    # Create notification
+    try:
+        await NotificationService.create_vm_notification(
+            db=db,
+            user_id=current_user.id,
+            vm_id=vmid,
+            action="stopped",
+            type="info",
+            details=f"VM {vmid} stop command sent successfully"
+        )
+    except Exception as e:
+        # Don't fail the request if notification creation fails
+        print(f"Failed to create notification: {e}")
+    
     return {"message": "VM stop command sent"}
 
 
@@ -838,6 +869,19 @@ async def create_vm_background(
         active_tasks[task_id]["completed_at"] = datetime.now().isoformat()
         archive_task(task_id)
         
+        # Create success notification
+        try:
+            await NotificationService.create_vm_notification(
+                db=db,
+                user_id=current_user.id,
+                vm_id=vm_data.vmid,
+                action="created",
+                type="success",
+                details=f"VM '{vm_data.name}' (ID: {vm_data.vmid}) has been created successfully" + (f" with IP {assigned_ip}" if assigned_ip else "")
+            )
+        except Exception as e:
+            print(f"Failed to create notification: {e}")
+        
     except Exception as e:
         print(f"[{task_id}] Error creating VM: {e}")
         import traceback
@@ -848,6 +892,19 @@ async def create_vm_background(
         active_tasks[task_id]["error"] = str(e)
         active_tasks[task_id]["completed_at"] = datetime.now().isoformat()
         archive_task(task_id)
+        
+        # Create error notification
+        try:
+            await NotificationService.create_vm_notification(
+                db=db,
+                user_id=current_user.id,
+                vm_id=vm_data.vmid,
+                action="creation failed",
+                type="error",
+                details=f"Failed to create VM '{vm_data.name}': {str(e)[:100]}"
+            )
+        except Exception as ne:
+            print(f"Failed to create error notification: {ne}")
 
 
 @router.get("/node/{node_id}/templates")
@@ -997,9 +1054,26 @@ async def delete_vm(
         select(VMAssignment).where(VMAssignment.vmid == vmid)
     )
     assignments = result.scalars().all()
+    
+    # Get VM name for notification before deletion
+    vm_name = assignments[0].name if assignments else f"VM {vmid}"
+    
     for assignment in assignments:
         await db.delete(assignment)
     await db.commit()
+    
+    # Create notification
+    try:
+        await NotificationService.create_vm_notification(
+            db=db,
+            user_id=current_user.id,
+            vm_id=vmid,
+            action="deleted",
+            type="warning",
+            details=f"VM '{vm_name}' (ID: {vmid}) has been deleted"
+        )
+    except Exception as e:
+        print(f"Failed to create notification: {e}")
     
     return {"message": "VM deleted successfully"}
 

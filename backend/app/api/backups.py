@@ -10,6 +10,7 @@ from app.core.dependencies import get_current_user
 from app.core.rbac import require_permission
 from app.models.user import User
 from app.services.proxmox import ProxmoxService
+from app.services.notification_service import NotificationService
 
 
 router = APIRouter(prefix="/backups", tags=["Backups"])
@@ -91,6 +92,19 @@ async def create_vm_backup(
             compress=backup_req.compress,
             notes=backup_req.notes
         )
+        
+        # Create notification
+        try:
+            await NotificationService.create_backup_notification(
+                db=db,
+                user_id=current_user.id,
+                vm_id=vmid,
+                action="started",
+                type="info",
+                details=f"Backup task started for VM {vmid} on storage '{backup_req.storage}'"
+            )
+        except Exception as e:
+            print(f"Failed to create notification: {e}")
         
         return BackupCreateResponse(**result)
     except Exception as e:
