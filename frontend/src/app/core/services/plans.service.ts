@@ -15,6 +15,12 @@ export class PlansService {
   createCloudLicense(plan: any): Observable<any> {
     return this.http.post(`${this.apiUrl}/plans/cloud-license`, plan);
   }
+  updateCloudLicense(id: number, plan: any): Observable<any> {
+    return this.http.put(`${this.apiUrl}/plans/cloud-license/${id}`, plan);
+  }
+  deleteCloudLicense(id: number): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/plans/cloud-license/${id}`);
+  }
   assignCloudLicense(userId: number, planId: number): Observable<{ message: string }> {
     return this.http.post<{ message: string }>(`${this.apiUrl}/plans/cloud-license/assign/${userId}/${planId}`, {});
   }
@@ -25,6 +31,15 @@ export class PlansService {
   }
   createVpsPlan(plan: any): Observable<any> {
     return this.http.post(`${this.apiUrl}/plans/vps`, plan);
+  }
+  updateVpsPlan(id: number, plan: any): Observable<any> {
+    return this.http.put(`${this.apiUrl}/plans/vps/${id}`, plan);
+  }
+  deleteVpsPlan(id: number): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/plans/vps/${id}`);
+  }
+  listOsTemplates(): Observable<{ templates: any[] }> {
+    return this.http.get<{ templates: any[] }>(`${this.apiUrl}/plans/os-templates`);
   }
 
   // Resource Groups

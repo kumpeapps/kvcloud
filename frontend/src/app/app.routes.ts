@@ -94,6 +94,10 @@ export const routes: Routes = [
       },
       {
         path: 'plans',
+        loadComponent: () => import('./features/plans/plans-browse.component').then(m => m.PlansBrowseComponent)
+      },
+      {
+        path: 'plans/manager',
         loadComponent: () => import('./features/plans/plans-manager.component').then(m => m.PlansManagerComponent)
       },
       {

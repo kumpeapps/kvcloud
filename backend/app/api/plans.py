@@ -28,17 +28,60 @@ class CloudLicensePlanCreate(BaseModel):
     allow_self_approval: bool = False
 
 
+class CloudLicensePlanUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    max_vms: int | None = None
+    max_cpu_cores: int | None = None
+    max_ram_mb: int | None = None
+    max_disk_gb: int | None = None
+    max_snapshots: int | None = None
+    max_backups: int | None = None
+    max_isos: int | None = None
+    max_ips: int | None = None
+    allow_self_approval: bool | None = None
+
+
 class VPSPlanCreate(BaseModel):
     name: str
     description: str | None = None
     cpu_cores: int = Field(default=1, ge=1)
+    cpu_sockets: int = Field(default=1, ge=1)
+    cpu_type: str = "host"  # host, qemu64, etc
     ram_mb: int = Field(default=512, ge=128)
     disk_gb: int = Field(default=10, ge=1)
+    disk_type: str = "virtio"  # virtio, ide, scsi
+    number_of_ips: int = Field(default=1, ge=1)
     virtio: bool = True
     scsi: bool = False
     enable_vnc: bool = False
+    enable_serial: bool = False
+    os_template: str | None = None
     ip_group_id: int | None = None
     iso_group_id: int | None = None
+    price_per_month: int | None = None  # in cents
+    max_instances_per_user: int | None = None
+
+
+class VPSPlanUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    cpu_cores: int | None = Field(default=None, ge=1)
+    cpu_sockets: int | None = Field(default=None, ge=1)
+    cpu_type: str | None = None
+    ram_mb: int | None = Field(default=None, ge=128)
+    disk_gb: int | None = Field(default=None, ge=1)
+    disk_type: str | None = None
+    number_of_ips: int | None = Field(default=None, ge=1)
+    virtio: bool | None = None
+    scsi: bool | None = None
+    enable_vnc: bool | None = None
+    enable_serial: bool | None = None
+    os_template: str | None = None
+    ip_group_id: int | None = None
+    iso_group_id: int | None = None
+    price_per_month: int | None = None
+    max_instances_per_user: int | None = None
 
 
 class GroupCreate(BaseModel):
@@ -74,8 +117,48 @@ async def create_cloud_license_plan(data: CloudLicensePlanCreate, db: AsyncSessi
 @require_permission("plan", "read")
 async def list_cloud_license_plans(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
     result = await db.execute(select(CloudLicensePlan))
-    plans = [{"id": p.id, "name": p.name} for p in result.scalars().all()]
+    plans = []
+    for p in result.scalars().all():
+        plans.append({
+            "id": p.id,
+            "name": p.name,
+            "description": p.description,
+            "max_vms": p.max_vms,
+            "max_cpu_cores": p.max_cpu_cores,
+            "max_ram_mb": p.max_ram_mb,
+            "max_disk_gb": p.max_disk_gb,
+            "max_snapshots": p.max_snapshots,
+            "max_backups": p.max_backups,
+            "max_isos": p.max_isos,
+            "max_ips": p.max_ips,
+            "allow_self_approval": p.allow_self_approval,
+        })
     return {"plans": plans}
+
+
+@router.put("/cloud-license/{plan_id}")
+@require_permission("plan", "update")
+async def update_cloud_license_plan(plan_id: int, data: CloudLicensePlanUpdate, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    plan = await db.get(CloudLicensePlan, plan_id)
+    if not plan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cloud license plan not found")
+    for field, value in data.model_dump(exclude_unset=True).items():
+        if value is not None:
+            setattr(plan, field, value)
+    await db.commit()
+    await db.refresh(plan)
+    return {"plan": {"id": plan.id, "name": plan.name}}
+
+
+@router.delete("/cloud-license/{plan_id}")
+@require_permission("plan", "delete")
+async def delete_cloud_license_plan(plan_id: int, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    plan = await db.get(CloudLicensePlan, plan_id)
+    if not plan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cloud license plan not found")
+    await db.delete(plan)
+    await db.commit()
+    return {"message": "Plan deleted"}
 
 
 @router.post("/cloud-license/assign/{user_id}/{plan_id}")
@@ -97,12 +180,80 @@ async def create_vps_plan(data: VPSPlanCreate, db: AsyncSession = Depends(get_db
     return {"plan": {"id": plan.id, "name": plan.name}}
 
 
+@router.put("/vps/{plan_id}")
+@require_permission("plan", "update")
+async def update_vps_plan(plan_id: int, data: VPSPlanUpdate, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    plan = await db.get(VPSPlan, plan_id)
+    if not plan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="VPS plan not found")
+    for field, value in data.model_dump(exclude_unset=True).items():
+        if value is not None:
+            setattr(plan, field, value)
+    await db.commit()
+    await db.refresh(plan)
+    return {"plan": {"id": plan.id, "name": plan.name}}
+
+
+@router.delete("/vps/{plan_id}")
+@require_permission("plan", "delete")
+async def delete_vps_plan(plan_id: int, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    plan = await db.get(VPSPlan, plan_id)
+    if not plan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="VPS plan not found")
+    await db.delete(plan)
+    await db.commit()
+    return {"message": "Plan deleted"}
+
+
 @router.get("/vps")
 @require_permission("plan", "read")
 async def list_vps_plans(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
     result = await db.execute(select(VPSPlan))
-    plans = [{"id": p.id, "name": p.name, "cpu_cores": p.cpu_cores, "ram_mb": p.ram_mb, "disk_gb": p.disk_gb} for p in result.scalars().all()]
+    plans = []
+    for p in result.scalars().all():
+        plans.append({
+            "id": p.id,
+            "name": p.name,
+            "description": p.description,
+            "cpu_cores": p.cpu_cores,
+            "cpu_sockets": p.cpu_sockets,
+            "cpu_type": p.cpu_type,
+            "ram_mb": p.ram_mb,
+            "disk_gb": p.disk_gb,
+            "disk_type": p.disk_type,
+            "number_of_ips": p.number_of_ips,
+            "virtio": p.virtio,
+            "scsi": p.scsi,
+            "enable_vnc": p.enable_vnc,
+            "enable_serial": p.enable_serial,
+            "os_template": p.os_template,
+            "ip_group_id": p.ip_group_id,
+            "iso_group_id": p.iso_group_id,
+            "price_per_month": p.price_per_month,
+            "max_instances_per_user": p.max_instances_per_user,
+        })
     return {"plans": plans}
+
+
+@router.get("/os-templates")
+@require_permission("plan", "read")
+async def list_os_templates(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_user)):
+    """List available OS templates for VPS plans"""
+    templates = [
+        {"name": "debian-11", "label": "Debian 11"},
+        {"name": "debian-12", "label": "Debian 12"},
+        {"name": "ubuntu-20.04", "label": "Ubuntu 20.04 LTS"},
+        {"name": "ubuntu-22.04", "label": "Ubuntu 22.04 LTS"},
+        {"name": "ubuntu-24.04", "label": "Ubuntu 24.04 LTS"},
+        {"name": "centos-7", "label": "CentOS 7"},
+        {"name": "centos-8", "label": "CentOS 8"},
+        {"name": "centos-9", "label": "CentOS 9"},
+        {"name": "fedora-38", "label": "Fedora 38"},
+        {"name": "fedora-39", "label": "Fedora 39"},
+        {"name": "almalinux-8", "label": "AlmaLinux 8"},
+        {"name": "almalinux-9", "label": "AlmaLinux 9"},
+    ]
+    return {"templates": templates}
 
 
 @router.post("/groups/ip")
